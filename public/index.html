@@ -150,6 +150,20 @@ h2{font-family:var(--disp);font-variation-settings:'wdth' 76;font-weight:800;fon
 .use p b{color:var(--ink)}
 
 /* ---------- pricing ---------- */
+.tiers{margin-top:38px;display:grid;grid-template-columns:repeat(4,1fr);border:1.5px solid var(--ink);background:#fff}
+.tier{padding:26px 22px 28px;position:relative}
+.tier+.tier{border-left:1.5px solid var(--ink)}
+.tier h3{font-family:var(--mono);font-size:13px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--viridian);display:flex;align-items:center;gap:8px;margin-bottom:14px}
+.tier .price{font-size:36px;margin-bottom:6px}
+.tier .per{display:block;font-family:var(--mono);font-size:11.5px;color:var(--ink-soft);margin-bottom:16px;letter-spacing:.04em}
+.tier ul{list-style:none}
+.tier li{padding:8px 0;border-top:1px solid var(--line);font-size:13.5px;color:var(--ink-soft);display:flex;gap:9px;align-items:baseline}
+.tier li:first-of-type{border-top:none}
+.tier li .mk{font-family:var(--mono);font-size:12px;color:var(--viridian);flex:0 0 14px}
+.tier li b{color:var(--ink)}
+.tier.hot{background:var(--paper-deep);box-shadow:inset 0 3px 0 var(--amber)}
+@media (max-width:900px){.tiers{grid-template-columns:1fr 1fr}.tier:nth-child(3),.tier:nth-child(4){border-top:1.5px solid var(--ink)}.tier:nth-child(3){border-left:none}}
+@media (max-width:560px){.tiers{grid-template-columns:1fr}.tier+.tier{border-left:none;border-top:1.5px solid var(--ink)}}
 .pricing{border-bottom:1.5px solid var(--ink)}
 .pricing .wrap{padding-top:64px;padding-bottom:72px}
 .price{font-family:var(--mono);font-size:42px;font-weight:600;margin-bottom:16px;letter-spacing:-.02em}
@@ -352,58 +366,55 @@ footer a{color:var(--viridian)}
 <section class="pricing" id="pricing">
   <div class="wrap">
     <p class="sec-label">The deal, stated plainly</p>
-    <h2>Self-host for free. Try hosted for free. Pay for concurrency.</h2>
-    <div class="compare">
-      <div class="col good">
-        <h3>Self-host <span class="tag">Your keys</span></h3>
-        <p class="price">$0 <span>/ month, forever &mdash; your infrastructure</span></p>
+    <h2>You're buying concurrency. The names do the math.</h2>
+    <p style="margin-top:16px;font-size:16px;color:var(--ink-soft);max-width:62ch">Tokens live one hour, so tokens-per-window is how many agents can work your repos <b style="color:var(--ink)">at the same time</b>. Five times the agents costs five times the dollars &mdash; linear, no bundling tricks. Every response shows <span class="mono">remaining</span> and <span class="mono">window_reset_at</span>, so the wall is never a surprise.</p>
+    <!-- Hero-number rule: the big figure is ALWAYS the per-month price.
+         Source of truth: governance/external/tiers.md — script re-renders
+         quotas AND prices from a live fetch of that doc; these cards are the
+         static mirror. -->
+    <div class="tiers" id="tierCards">
+      <div class="tier" data-tier="Free">
+        <h3>Free</h3>
+        <p class="price">$0</p>
+        <span class="per">one-time trial &mdash; no card</span>
         <ul>
-          <li><span class="mk">&#10003;</span>Same code, your GitHub App, your worker. Nothing of yours touches anyone else's infrastructure.</li>
-          <li><span class="mk">&#10003;</span>Zero shared trust &mdash; the private key and the blast radius are yours alone.</li>
-          <li><span class="mk">&#10003;</span>The setup script below is the entire runbook.</li>
+          <li><span class="mk">&#10003;</span><span>Bucket of <b data-slot="quota">50 mints</b>, total</span></li>
+          <li><span class="mk">&#10003;</span><span>Burn them in an hour or over a month</span></li>
+          <li><span class="mk">&#10003;</span><span>No decay &mdash; a clean wall, then you decide</span></li>
         </ul>
-        <a class="btn" href="#setup">Run your own</a>
       </div>
-      <div class="col good">
-        <h3>Hosted free <span class="tag">No card</span></h3>
-        <!-- Hero-number rule (governance/internal/pricing-decisions.md): the big
-             figure is ALWAYS the per-month price. Periods, totals, and units are
-             fine print. Learned from customer zero misreading a big "$24 / two
-             years" as $24 per month. When paid prices land: "$X <span>/ month</span>". -->
-        <p class="price">$0 <span>/ month &mdash; one-time trial bucket of 50 mints</span></p>
+      <div class="tier hot" data-tier="Pro">
+        <h3>Pro</h3>
+        <p class="price" data-slot="price">$5</p>
+        <span class="per">per month</span>
         <ul>
-          <li><span class="mk">&#10003;</span>Connect in a minute and genuinely feel it &mdash; burn all 50 in an hour or spread them over a month.</li>
-          <li><span class="mk">&#10003;</span>No decay, no daily trickle. When the bucket is empty, you decide: upgrade or walk.</li>
-          <li><span class="mk">&#10003;</span>Re-requesting the same scope while a token is live is free &mdash; retries never cost you.</li>
+          <li><span class="mk">&#10003;</span><span><b data-slot="quota">5</b> tokens per 5-hour window</span></li>
+          <li><span class="mk">&#10003;</span><span>&asymp; <b>5 agents</b> working at once</span></li>
+          <li><span class="mk">&#10003;</span><span>Weekly backstop <span data-slot="weekly">60</span> &mdash; normal use never feels it</span></li>
         </ul>
-        <a class="btn btn-primary" href="#setup">Connect your agent</a>
+      </div>
+      <div class="tier" data-tier="Max 5x">
+        <h3>Max 5x</h3>
+        <p class="price" data-slot="price">$25</p>
+        <span class="per">per month</span>
+        <ul>
+          <li><span class="mk">&#10003;</span><span><b data-slot="quota">25</b> tokens per 5-hour window</span></li>
+          <li><span class="mk">&#10003;</span><span>Team or heavy solo operator</span></li>
+          <li><span class="mk">&#10003;</span><span>Weekly backstop <span data-slot="weekly">300</span></span></li>
+        </ul>
+      </div>
+      <div class="tier" data-tier="Max 20x">
+        <h3>Max 20x</h3>
+        <p class="price" data-slot="price">$100</p>
+        <span class="per">per month</span>
+        <ul>
+          <li><span class="mk">&#10003;</span><span><b data-slot="quota">100</b> tokens per 5-hour window</span></li>
+          <li><span class="mk">&#10003;</span><span>Run a <b>fleet</b> without reset gymnastics</span></li>
+          <li><span class="mk">&#10003;</span><span>Weekly backstop <span data-slot="weekly">1,200</span></span></li>
+        </ul>
       </div>
     </div>
-
-    <div style="margin-top:38px">
-      <h3 class="mono" style="font-size:13px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--viridian);margin-bottom:14px">Paid tiers &mdash; you're buying concurrency</h3>
-      <p style="font-size:15px;color:var(--ink-soft);max-width:64ch;margin-bottom:18px">Tokens live one hour, so tokens-per-window is how many agents can work your repos at once. Every response tells you exactly where you stand &mdash; <span class="mono">remaining</span>, <span class="mono">window_reset_at</span>, <span class="mono">cached</span>. The wall is never a surprise.</p>
-      <!-- Source of truth: governance/external/tiers.md (the server enforces the same
-           document). The rows below are a static mirror; script replaces them with a
-           live fetch of the doc so the page cannot drift from what is enforced. -->
-      <table id="tierTable" style="width:100%;border:1.5px solid var(--ink);border-collapse:collapse;background:#fff;font-size:15px">
-        <thead>
-          <tr style="background:var(--viridian);color:var(--paper)">
-            <th style="text-align:left;padding:12px 16px;font-family:var(--mono);font-size:12px;letter-spacing:.1em;text-transform:uppercase">Tier</th>
-            <th style="text-align:left;padding:12px 16px;font-family:var(--mono);font-size:12px;letter-spacing:.1em;text-transform:uppercase">Tokens / 5-hr window</th>
-            <th style="text-align:left;padding:12px 16px;font-family:var(--mono);font-size:12px;letter-spacing:.1em;text-transform:uppercase">Weekly backstop</th>
-            <th style="text-align:left;padding:12px 16px;font-family:var(--mono);font-size:12px;letter-spacing:.1em;text-transform:uppercase">Means</th>
-          </tr>
-        </thead>
-        <tbody class="mono" style="font-size:14px">
-          <tr><td style="padding:12px 16px;border-top:1px solid var(--line)">Free</td><td style="padding:12px 16px;border-top:1px solid var(--line)">one-time bucket of 50</td><td style="padding:12px 16px;border-top:1px solid var(--line)">&mdash;</td><td style="padding:12px 16px;border-top:1px solid var(--line)">try it for real</td></tr>
-          <tr><td style="padding:12px 16px;border-top:1px solid var(--line)">Pro</td><td style="padding:12px 16px;border-top:1px solid var(--line)">5</td><td style="padding:12px 16px;border-top:1px solid var(--line)">60</td><td style="padding:12px 16px;border-top:1px solid var(--line)">~5 concurrent agents</td></tr>
-          <tr><td style="padding:12px 16px;border-top:1px solid var(--line)">Max 5x</td><td style="padding:12px 16px;border-top:1px solid var(--line)">25</td><td style="padding:12px 16px;border-top:1px solid var(--line)">300</td><td style="padding:12px 16px;border-top:1px solid var(--line)">team / heavy solo</td></tr>
-          <tr><td style="padding:12px 16px;border-top:1px solid var(--line)">Max 20x</td><td style="padding:12px 16px;border-top:1px solid var(--line)">100</td><td style="padding:12px 16px;border-top:1px solid var(--line)">1,200</td><td style="padding:12px 16px;border-top:1px solid var(--line)">a fleet</td></tr>
-        </tbody>
-      </table>
-      <p class="kill" style="margin-top:18px"><b>$</b> Per-tier prices land at launch. The quotas above are read from <a href="https://github.com/klappy/git-repo-auth-mcp/blob/main/governance/external/tiers.md" target="_blank" rel="noopener">the same governance document the server enforces</a> &mdash; ask your agent's <span class="mono">docs</span> tool about "tiers" and it reads it too.</p>
-    </div>
+    <p class="kill" style="margin-top:22px"><b>$</b> Re-requesting the same scope while a token is live is always free. Prices and quotas render from <a href="https://github.com/klappy/git-repo-auth-mcp/blob/main/governance/external/tiers.md" target="_blank" rel="noopener">the governance document the server enforces</a>. Prefer your own keys? <a href="#setup">Self-host for $0, forever</a> &mdash; same code.</p>
   </div>
 </section>
 
@@ -539,22 +550,29 @@ openssl pkcs8 -topk8 -inform PEM \
   wireCopy('copyClone', function(){ return document.getElementById('cloneCmd').textContent; });
   wireCopy('copySetup', function(){ return document.getElementById('setupCode').innerText; });
 
-  // ----- pricing table: render from the governance doc the server enforces -----
-  // Static rows above are a mirror/fallback; the doc is the source of truth.
+  // ----- pricing cards: render from the governance doc the server enforces -----
+  // Static cards above are a mirror/fallback; tiers.md is the source of truth.
   fetch('https://raw.githubusercontent.com/klappy/git-repo-auth-mcp/main/governance/external/tiers.md')
     .then(function(r){ return r.ok ? r.text() : Promise.reject(); })
     .then(function(md){
       var bucket = md.match(/bucket of \*\*(\d+) mints? total\*\*/i);
-      var rows = [], re = /^\|\s*(Pro|Max 5x|Max 20x)\s*\|\s*\*\*(\d+)\*\*\s*\|\s*([\d,]+)\s*\|/gim, m;
-      while ((m = re.exec(md))) rows.push(m);
-      if (!bucket || rows.length < 3) return; // doc shape changed: keep the mirror
-      var meaning = { 'Pro': '~5 concurrent agents', 'Max 5x': 'team / heavy solo', 'Max 20x': 'a fleet' };
-      function td(t){ return '<td style="padding:12px 16px;border-top:1px solid var(--line)">' + t + '</td>'; }
-      var html = '<tr>' + td('Free') + td('one-time bucket of ' + bucket[1]) + td('&mdash;') + td('try it for real') + '</tr>';
-      rows.forEach(function(r){
-        html += '<tr>' + td(r[1]) + td(r[2]) + td(r[3]) + td(meaning[r[1]] || '') + '</tr>';
+      var re = /^\|\s*(Pro|Max 5x|Max 20x)\s*\|\s*\*\*(\d+)\*\*\s*\|\s*([\d,]+)\s*\|\s*(\$[\d.]+)\/mo\s*\|/gim, m;
+      var rows = {};
+      while ((m = re.exec(md))) rows[m[1]] = { quota: m[2], weekly: m[3], price: m[4] };
+      if (bucket){
+        var fq = document.querySelector('[data-tier="Free"] [data-slot="quota"]');
+        if (fq) fq.textContent = bucket[1] + ' mints';
+      }
+      Object.keys(rows).forEach(function(name){
+        var card = document.querySelector('[data-tier="' + name + '"]');
+        if (!card) return;
+        var p = card.querySelector('[data-slot="price"]');
+        var q = card.querySelector('[data-slot="quota"]');
+        var w = card.querySelector('[data-slot="weekly"]');
+        if (p) p.textContent = rows[name].price;
+        if (q) q.textContent = rows[name].quota;
+        if (w) w.textContent = rows[name].weekly;
       });
-      document.querySelector('#tierTable tbody').innerHTML = html;
     })
     .catch(function(){ /* mirror stands */ });
 })();

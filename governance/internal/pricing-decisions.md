@@ -45,3 +45,7 @@ First-time vibe coder lives entirely inside the 50-mint bucket, never sees a win
 ## [L] Hero-number rule: the big figure is always the per-month price
 
 Learned from customer zero (2026-06-10): the legacy homepage showed a large "$24" with "for two years" in fine print, and he read it as $24/month — missing that the real deal was $1/month. People parse the biggest number on a pricing card as the monthly price regardless of qualifiers. Standing rule for every pricing surface (homepage, checkout, docs): the hero number is the per-month figure; billing periods, totals, and unit counts are fine print. When tier prices land, cards read "$X / month" big, with any annual total small ("billed annually, $Y/yr"). Counts of things that are not prices (mints, tokens) never take the hero slot.
+
+## [D] Launch prices: linear with concurrency — Pro $5/mo, Max 5x $25/mo, Max 20x $100/mo
+
+The tier names state the multiplier, so the prices honor it: 5x the window quota costs 5x the dollars, 20x costs 20x. Self-explaining, impossible to feel tricked by, and consistent with the public framing that limits are concurrency slots, not cost recovery. Evidence for the ceiling: customer zero wanted the product while believing it cost $24/month — Max 5x at $25 sits exactly on the demonstrated willingness-to-pay, with Pro at $5 as the easy yes. Prices live in governance/external/tiers.md (Price column); homepage and docs tool render from it, so a repricing is a one-line doc edit. Ratified by captain review of this PR.
