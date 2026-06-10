@@ -53,3 +53,7 @@ The tier names state the multiplier, so the prices honor it: 5x the window quota
 ## [D] Amendment (captain): Solo replaces Pro — the legacy $1/mo deal is the entry paid tier
 
 Solo: $1/month, billed $24 per two years, with the 5-tokens-per-5-hour-window quota (and the 60/week backstop). It is the deal customer zero responded to, restored deliberately: an irresistible entry price that makes the paid decision trivial, while Max 5x ($25) and Max 20x ($100) carry the revenue and keep their honest names — 5x and 20x Solo's concurrency. Pricing is no longer price-linear and that's accepted; Solo is the hook, not the margin. Five per window means five whenever you like: all in the first hour, or one an hour for five hours.
+
+## [D] Final ladder (ratified): Solo / Pro / Team / Fleet — named for agentic concurrency, discounted per slot as you climb
+
+Solo 5 @ $1/mo ($24 per 2 years), Pro 30 @ $5, Team 200 @ $25, Fleet 1,000 @ $100; weekly backstops at 12x window. Per-slot price falls monotonically ($0.20 / $0.167 / $0.125 / $0.10) so scale is rewarded, never punished. Multiplier names (Max 5x/20x) retired: they had drifted to multiplying *price*, which is anti-marketing. Tier names now answer the captain's framing question — "how big is your agentic concurrency?" — and every tier is one human, no seats; Team and Fleet are teams and fleets of agents. KV accounting is sufficient through Team; a Fleet customer at full tilt triggers the Durable Object counter swap already logged as an open item (interface unchanged).

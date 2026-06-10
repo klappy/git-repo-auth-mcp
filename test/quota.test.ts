@@ -10,8 +10,9 @@ describe("governance is parseable (build-time snapshot must never drift)", () =>
     const p = parseTiersDoc(tiersDoc, "bundled");
     expect(p.freeBucket).toBe(50);
     expect(p.paid.solo).toEqual({ window: 5, weekly: 60 });
-    expect(p.paid.max_5x).toEqual({ window: 25, weekly: 300 });
-    expect(p.paid.max_20x).toEqual({ window: 100, weekly: 1200 });
+    expect(p.paid.pro).toEqual({ window: 30, weekly: 360 });
+    expect(p.paid.team).toEqual({ window: 200, weekly: 2400 });
+    expect(p.paid.fleet).toEqual({ window: 1000, weekly: 12000 });
     expect(p.windowMs).toBe(5 * 3_600_000);
   });
 

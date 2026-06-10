@@ -150,11 +150,11 @@ h2{font-family:var(--disp);font-variation-settings:'wdth' 76;font-weight:800;fon
 .use p b{color:var(--ink)}
 
 /* ---------- pricing ---------- */
-.tiers{margin-top:38px;display:grid;grid-template-columns:repeat(4,1fr);border:1.5px solid var(--ink);background:#fff}
-.tier{padding:26px 22px 28px;position:relative}
+.tiers{margin-top:38px;display:grid;grid-template-columns:repeat(5,1fr);border:1.5px solid var(--ink);background:#fff}
+.tier{padding:24px 18px 26px;position:relative}
 .tier+.tier{border-left:1.5px solid var(--ink)}
 .tier h3{font-family:var(--mono);font-size:13px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--viridian);display:flex;align-items:center;gap:8px;margin-bottom:14px}
-.tier .price{font-size:36px;margin-bottom:6px}
+.tier .price{font-size:32px;margin-bottom:6px}
 .tier .per{display:block;font-family:var(--mono);font-size:11.5px;color:var(--ink-soft);margin-bottom:16px;letter-spacing:.04em}
 .tier ul{list-style:none}
 .tier li{padding:8px 0;border-top:1px solid var(--line);font-size:13.5px;color:var(--ink-soft);display:flex;gap:9px;align-items:baseline}
@@ -162,7 +162,7 @@ h2{font-family:var(--disp);font-variation-settings:'wdth' 76;font-weight:800;fon
 .tier li .mk{font-family:var(--mono);font-size:12px;color:var(--viridian);flex:0 0 14px}
 .tier li b{color:var(--ink)}
 .tier.hot{background:var(--paper-deep);box-shadow:inset 0 3px 0 var(--amber)}
-@media (max-width:900px){.tiers{grid-template-columns:1fr 1fr}.tier:nth-child(3),.tier:nth-child(4){border-top:1.5px solid var(--ink)}.tier:nth-child(3){border-left:none}}
+@media (max-width:1024px){.tiers{grid-template-columns:1fr 1fr}.tier:nth-child(n+3){border-top:1.5px solid var(--ink)}.tier:nth-child(odd){border-left:none}.tier:nth-child(2){border-left:1.5px solid var(--ink)}}
 @media (max-width:560px){.tiers{grid-template-columns:1fr}.tier+.tier{border-left:none;border-top:1.5px solid var(--ink)}}
 .pricing{border-bottom:1.5px solid var(--ink)}
 .pricing .wrap{padding-top:64px;padding-bottom:72px}
@@ -366,8 +366,8 @@ footer a{color:var(--viridian)}
 <section class="pricing" id="pricing">
   <div class="wrap">
     <p class="sec-label">The deal, stated plainly</p>
-    <h2>You're buying concurrency. Solo gets you in. The Max names do the math.</h2>
-    <p style="margin-top:16px;font-size:16px;color:var(--ink-soft);max-width:62ch">Tokens live one hour, so tokens-per-window is how many agents can work your repos <b style="color:var(--ink)">at the same time</b>. Five times the agents costs five times the dollars &mdash; linear, no bundling tricks. Every response shows <span class="mono">remaining</span> and <span class="mono">window_reset_at</span>, so the wall is never a surprise.</p>
+    <h2>How big is your agentic concurrency?</h2>
+    <p style="margin-top:16px;font-size:16px;color:var(--ink-soft);max-width:62ch">Tokens live one hour, so tokens-per-window is how many agents can work your repos <b style="color:var(--ink)">at the same time</b>. Every tier is one human, no seats &mdash; <b style="color:var(--ink)">the team is your agents</b>, and the per-agent price falls as you climb. Every response shows <span class="mono">remaining</span> and <span class="mono">window_reset_at</span>, so the wall is never a surprise.</p>
     <!-- Hero-number rule: the big figure is ALWAYS the per-month price.
          Source of truth: governance/external/tiers.md — script re-renders
          quotas AND prices from a live fetch of that doc; these cards are the
@@ -379,7 +379,6 @@ footer a{color:var(--viridian)}
         <span class="per">one-time trial &mdash; no card</span>
         <ul>
           <li><span class="mk">&#10003;</span><span>Bucket of <b data-slot="quota">50 mints</b>, total</span></li>
-          <li><span class="mk">&#10003;</span><span>Burn them in an hour or over a month</span></li>
           <li><span class="mk">&#10003;</span><span>No decay &mdash; a clean wall, then you decide</span></li>
         </ul>
       </div>
@@ -388,29 +387,39 @@ footer a{color:var(--viridian)}
         <p class="price" data-slot="price">$1</p>
         <span class="per">per month &mdash; $24 billed every 2 years</span>
         <ul>
-          <li><span class="mk">&#10003;</span><span><b data-slot="quota">5</b> tokens per 5-hour window</span></li>
-          <li><span class="mk">&#10003;</span><span>All 5 in the first hour, or one an hour &mdash; your rhythm</span></li>
-          <li><span class="mk">&#10003;</span><span>Weekly backstop <span data-slot="weekly">60</span> &mdash; normal use never feels it</span></li>
+          <li><span class="mk">&#10003;</span><span><b data-slot="quota">5</b> agents at once</span></li>
+          <li><span class="mk">&#10003;</span><span>All 5 in the first hour, or one an hour</span></li>
+          <li><span class="mk">&#10003;</span><span>$0.20 per agent slot</span></li>
         </ul>
       </div>
-      <div class="tier" data-tier="Max 5x">
-        <h3>Max 5x</h3>
+      <div class="tier" data-tier="Pro">
+        <h3>Pro</h3>
+        <p class="price" data-slot="price">$5</p>
+        <span class="per">per month</span>
+        <ul>
+          <li><span class="mk">&#10003;</span><span><b data-slot="quota">30</b> agents at once</span></li>
+          <li><span class="mk">&#10003;</span><span>5x the price, <b>6x</b> the agents</span></li>
+          <li><span class="mk">&#10003;</span><span>$0.167 per agent slot</span></li>
+        </ul>
+      </div>
+      <div class="tier" data-tier="Team">
+        <h3>Team</h3>
         <p class="price" data-slot="price">$25</p>
         <span class="per">per month</span>
         <ul>
-          <li><span class="mk">&#10003;</span><span><b data-slot="quota">25</b> tokens per 5-hour window</span></li>
-          <li><span class="mk">&#10003;</span><span>Team or heavy solo operator</span></li>
-          <li><span class="mk">&#10003;</span><span>Weekly backstop <span data-slot="weekly">300</span></span></li>
+          <li><span class="mk">&#10003;</span><span><b data-slot="quota">200</b> agents at once</span></li>
+          <li><span class="mk">&#10003;</span><span>A team of agents &mdash; one human, no seats</span></li>
+          <li><span class="mk">&#10003;</span><span>$0.125 per agent slot</span></li>
         </ul>
       </div>
-      <div class="tier" data-tier="Max 20x">
-        <h3>Max 20x</h3>
+      <div class="tier" data-tier="Fleet">
+        <h3>Fleet</h3>
         <p class="price" data-slot="price">$100</p>
         <span class="per">per month</span>
         <ul>
-          <li><span class="mk">&#10003;</span><span><b data-slot="quota">100</b> tokens per 5-hour window</span></li>
-          <li><span class="mk">&#10003;</span><span>Run a <b>fleet</b> without reset gymnastics</span></li>
-          <li><span class="mk">&#10003;</span><span>Weekly backstop <span data-slot="weekly">1,200</span></span></li>
+          <li><span class="mk">&#10003;</span><span><b data-slot="quota">1,000</b> agents at once</span></li>
+          <li><span class="mk">&#10003;</span><span>Never think about the window again</span></li>
+          <li><span class="mk">&#10003;</span><span>$0.10 per agent slot</span></li>
         </ul>
       </div>
     </div>
@@ -556,7 +565,7 @@ openssl pkcs8 -topk8 -inform PEM \
     .then(function(r){ return r.ok ? r.text() : Promise.reject(); })
     .then(function(md){
       var bucket = md.match(/bucket of \*\*(\d+) mints? total\*\*/i);
-      var re = /^\|\s*(Solo|Max 5x|Max 20x)\s*\|\s*\*\*(\d+)\*\*\s*\|\s*([\d,]+)\s*\|\s*(\$[\d.]+)\/mo[^|]*\|/gim, m;
+      var re = /^\|\s*(Solo|Pro|Team|Fleet)\s*\|\s*\*\*([\d,]+)\*\*\s*\|\s*([\d,]+)\s*\|\s*(\$[\d.]+)\/mo[^|]*\|/gim, m;
       var rows = {};
       while ((m = re.exec(md))) rows[m[1]] = { quota: m[2], weekly: m[3], price: m[4] };
       if (bucket){

@@ -54,12 +54,12 @@ export async function verifyStripeSignature(
   return timingSafeEqual(hex, v1);
 }
 
-type TierId = "solo" | "max_5x" | "max_20x";
+type TierId = "solo" | "pro" | "team" | "fleet";
 
 function tierFromEvent(obj: Record<string, unknown>, env: Env): TierId | undefined {
   const meta = obj["metadata"] as Record<string, string> | undefined;
   const fromMeta = meta?.tier;
-  if (fromMeta === "solo" || fromMeta === "max_5x" || fromMeta === "max_20x") return fromMeta;
+  if (fromMeta === "solo" || fromMeta === "pro" || fromMeta === "team" || fromMeta === "fleet") return fromMeta;
   if (!env.STRIPE_PRICE_MAP) return undefined;
   try {
     const map = JSON.parse(env.STRIPE_PRICE_MAP) as Record<string, TierId>;

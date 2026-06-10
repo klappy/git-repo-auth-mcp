@@ -23,7 +23,7 @@ import bundledTiersDoc from "../governance/external/tiers.md";
 import type { Env } from "./types";
 
 export type GovernanceSource = "live" | "bundled";
-export type TierId = "free" | "solo" | "max_5x" | "max_20x";
+export type TierId = "free" | "solo" | "pro" | "team" | "fleet";
 
 export interface TierPolicy {
   freeBucket: number;
@@ -47,15 +47,15 @@ export function parseTiersDoc(md: string, source: GovernanceSource): TierPolicy 
 
   const paid: TierPolicy["paid"] = {};
   for (const row of md.matchAll(
-    /^\|\s*(Solo|Max 5x|Max 20x)\s*\|\s*\*\*(\d+)\*\*\s*\|\s*([\d,]+)\s*\|/gim
+    /^\|\s*(Solo|Pro|Team|Fleet)\s*\|\s*\*\*([\d,]+)\*\*\s*\|\s*([\d,]+)\s*\|/gim
   )) {
-    const id = row[1].toLowerCase().replace(/\s+/g, "_");
-    paid[id === "solo" ? "solo" : id === "max_5x" ? "max_5x" : "max_20x"] = {
-      window: Number(row[2]),
+    const id = row[1].toLowerCase();
+    paid[id] = {
+      window: Number(row[2].replace(/,/g, "")),
       weekly: Number(row[3].replace(/,/g, "")),
     };
   }
-  for (const t of ["solo", "max_5x", "max_20x"]) {
+  for (const t of ["solo", "pro", "team", "fleet"]) {
     if (!paid[t]) throw new Error(`tiers.md: tier row missing: ${t}`);
   }
   return {
@@ -145,7 +145,7 @@ export type QuotaDecision = QuotaOk | QuotaDenied;
 
 export async function getTier(env: Env, login: string): Promise<TierId> {
   const t = await env.OAUTH_KV.get(`quota:tier:${login}`);
-  return t === "solo" || t === "max_5x" || t === "max_20x" ? t : "free";
+  return t === "solo" || t === "pro" || t === "team" || t === "fleet" ? t : "free";
 }
 
 /**

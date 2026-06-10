@@ -8,14 +8,17 @@ Concurrency. A minted token lives at most one hour, so "tokens minted per window
 
 ## The tiers
 
+How big is your agentic concurrency? Every tier is one human, no seats — the team is your agents.
+
 | Tier | Tokens per rolling 5-hour window | Weekly backstop | Price |
 |---|---|---|---|
 | Free | one-time bucket of **50 mints total** | — | $0 |
 | Solo | **5** | 60 | $1/mo ($24 per 2 years) |
-| Max 5x | **25** | 300 | $25/mo |
-| Max 20x | **100** | 1,200 | $100/mo |
+| Pro | **30** | 360 | $5/mo |
+| Team | **200** | 2,400 | $25/mo |
+| Fleet | **1,000** | 12,000 | $100/mo |
 
-Solo is the deal that started this: a dollar a month, billed $24 for two years. The Max tier names multiply Solo's concurrency — 5x and 20x the tokens per window. No bundling tricks, no "contact sales."
+Solo is the deal that started this: a dollar a month, billed $24 for two years. Above it, the per-slot price falls as you climb — $0.20 at Solo, $0.167 at Pro, $0.125 at Team, $0.10 at Fleet — so upgrading is always the better deal per agent. No bundling tricks, no "contact sales."
 
 ## How the free bucket works
 
