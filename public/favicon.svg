@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- git-repo-auth-mcp · v2 "struck coin": key reversed out of a minted viridian coin;
+     the bow is a dial — access that expires. Palette unchanged from the site. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Git Repo Auth MCP">
+  <!-- the coin -->
+  <rect width="64" height="64" rx="14" fill="#0E5A4A"/>
+  <!-- engraved security ring (large-size detail, vanishes gracefully small) -->
+  <circle cx="32" cy="32" r="26.5" fill="none" stroke="#FAFAF6" stroke-width="1" opacity="0.28"/>
+  <!-- key, reversed in paper -->
+  <circle cx="32" cy="21.5" r="8.5" fill="none" stroke="#FAFAF6" stroke-width="5"/>
+  <rect x="29.25" y="29" width="5.5" height="22.5" rx="1.5" fill="#FAFAF6"/>
+  <rect x="33" y="40" width="7.5" height="4.5" rx="1" fill="#FAFAF6"/>
+  <rect x="33" y="46.8" width="9.5" height="4.5" rx="1" fill="#FAFAF6"/>
+  <!-- the dial: amber hand in the bow — the token's clock -->
+  <line x1="32" y1="21.5" x2="35.4" y2="25" stroke="#D9A441" stroke-width="2.6" stroke-linecap="round"/>
+  <circle cx="32" cy="21.5" r="2.1" fill="#D9A441"/>
+</svg>
