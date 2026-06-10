@@ -193,14 +193,14 @@ footer a{color:var(--viridian)}
     <div>
       <p class="eyebrow">Credential issuance for AI agents</p>
       <h1>Stop pasting tokens into chat.<br><span class="accent">Mint ones that die.</span></h1>
-      <p class="lede">A small Cloudflare Worker your agent calls over MCP. It returns a <strong>scoped GitHub token that expires in one hour</strong> — minted on demand, down-scoped per request, attributed to a bot identity in every audit log. <strong>Expiry replaces rotation.</strong></p>
+      <p class="lede">Connect GitHub once. After that, your agent mints its own <strong>scoped tokens that expire in one hour</strong> — bound to your account, down-scoped per request, attributed to a bot identity in every audit log. <strong>Expiry replaces rotation.</strong></p>
       <div class="cta-row">
-        <a class="btn btn-primary" href="https://github.com/klappy/git-repo-auth-mcp" target="_blank" rel="noopener">Deploy your own ↗</a>
+        <a class="btn btn-primary" href="#setup">Connect your agent</a>
         <a class="btn" href="#how">See the flow</a>
       </div>
       <div class="clone">
-        <code id="cloneCmd">git clone https://github.com/klappy/git-repo-auth-mcp</code>
-        <button id="copyClone" aria-label="Copy clone command">copy</button>
+        <code id="cloneCmd">https://gitauth.klappy.dev/mcp</code>
+        <button id="copyClone" aria-label="Copy MCP server URL">copy MCP URL</button>
       </div>
     </div>
 
@@ -269,8 +269,8 @@ footer a{color:var(--viridian)}
     <div class="steps">
       <div class="step">
         <span class="n">STEP 1</span>
-        <h3>Your agent asks</h3>
-        <p>The agent calls the <code>github_token</code> MCP tool when it needs git or API access — optionally naming the repositories and permissions it wants, nothing more.</p>
+        <h3>You connect, once</h3>
+        <p>Add the MCP server to your client and log in with GitHub. The connection binds to <em>your</em> installation of the app — you choose which repos it covers. Then your agent calls <code>github_token</code> at need.</p>
         <span class="arrow" aria-hidden="true">→</span>
       </div>
       <div class="step">
@@ -303,8 +303,8 @@ footer a{color:var(--viridian)}
         <p>The recommended grant excludes Administration — but <b>Workflows write</b> means a token holder can modify CI, and CI runs with the repo's own credentials. That path is accepted, not eliminated: every CI change lands in PRs and audit logs under the bot identity. Don't want the trade? <b>Drop the Workflows permission.</b></p>
       </div>
       <div class="truth">
-        <h3>Your keys, your worker</h3>
-        <p>This is a self-host template. <b>Nobody custodies your private key</b> — not the authors, not a hosted relay, no one. It deploys to your Cloudflare account or it doesn't deploy. Kill switches: uninstall the App, or delete one secret. Outstanding tokens die within the hour.</p>
+        <h3>Blast radius, stated</h3>
+        <p>You never hand over a key — connecting means <b>installing a GitHub App on repos you choose</b>. If this bridge were compromised, exposure is minting over installed scopes, within the app's ceiling — never your account or credentials. Your kill switch is unilateral: <b>uninstall the app</b> and minting ends instantly. Want zero shared trust? <b>Self-host the same code.</b></p>
       </div>
     </div>
     <p class="kill"><b>$</b> Reversal is two clicks. The riskiest credential in this system is the one it replaces.</p>
@@ -315,8 +315,8 @@ footer a{color:var(--viridian)}
   <div class="wrap">
     <div class="left">
       <p class="sec-label">Setup</p>
-      <h2>Ten minutes, four secrets, done.</h2>
-      <p>Create a GitHub App with a narrow grant, convert the key, set four worker secrets, deploy. The full runbook — including why each step exists — is in the README.</p>
+      <h2>Connect in a minute. Or run your own.</h2>
+      <p><b>Use it:</b> add <span class="mono">https://gitauth.klappy.dev/mcp</span> to your MCP client and follow the GitHub login. <b>Operate it:</b> the script here is the self-host runbook — same code, your app, your worker. Details in the README.</p>
       <p class="fine">Keep your existing PAT until <code>github_token</code> mints its first real token. Retiring the fallback before validating the replacement is how lockouts happen — the README sequences this for you.</p>
     </div>
     <div class="term">
@@ -331,17 +331,20 @@ footer a{color:var(--viridian)}
 openssl pkcs8 -topk8 -inform PEM \
   -in your-app.private-key.pem -nocrypt -out app-pkcs8.pem
 
-<span class="c"># 3 — Secrets (never committed, never pasted in chat):</span>
-<span class="v">wrangler</span> secret put GH_APP_ID
-<span class="v">wrangler</span> secret put GH_APP_INSTALLATION_ID
-<span class="v">wrangler</span> secret put GH_APP_PRIVATE_KEY
-<span class="v">wrangler</span> secret put MCP_AUTH_TOKEN   <span class="c"># openssl rand -hex 32</span>
+<span class="c"># 3 — Enable user OAuth on the app: callback =</span>
+<span class="c">#     https://&lt;worker&gt;/callback, generate a client secret.</span>
 
-<span class="c"># 4 — Ship it:</span>
+<span class="c"># 4 — Secrets (never committed, never pasted in chat):</span>
+<span class="v">wrangler</span> secret put GH_APP_ID
+<span class="v">wrangler</span> secret put GH_APP_PRIVATE_KEY
+<span class="v">wrangler</span> secret put GITHUB_CLIENT_ID
+<span class="v">wrangler</span> secret put GITHUB_CLIENT_SECRET
+
+<span class="c"># 5 — Ship it:</span>
 <span class="v">npm</span> install && <span class="v">npm</span> run deploy
 
-<span class="c"># 5 — Point your MCP client at https://&lt;worker&gt;/mcp</span>
-<span class="c">#     with: Authorization: Bearer &lt;MCP_AUTH_TOKEN&gt;</span></pre>
+<span class="c"># 6 — Point any MCP client at https://&lt;worker&gt;/mcp —</span>
+<span class="c">#     OAuth + GitHub login happen in the browser.</span></pre>
     </div>
   </div>
 </section>

@@ -5,7 +5,16 @@
   "compatibility_date": "2026-06-01",
   "compatibility_flags": ["nodejs_compat"],
   "observability": { "enabled": true },
-  "assets": { "directory": "./public" }
+  "assets": { "directory": "./public" },
+  "kv_namespaces": [
+    { "binding": "OAUTH_KV", "id": "111afb472b3140d895a7105447e7e1fc" }
+  ],
+  "vars": {
+    // Public slug of your GitHub App (from its URL: github.com/apps/<slug>)
+    "GH_APP_SLUG": "git-repo-auth"
+  }
   // Secrets (set via `wrangler secret put`, never committed, never in chat):
-  //   GH_APP_ID, GH_APP_INSTALLATION_ID, GH_APP_PRIVATE_KEY (PKCS#8), MCP_AUTH_TOKEN
+  //   GH_APP_ID, GH_APP_PRIVATE_KEY (PKCS#8),
+  //   GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET
+  // Retired in v0.2: MCP_AUTH_TOKEN, GH_APP_INSTALLATION_ID
 }

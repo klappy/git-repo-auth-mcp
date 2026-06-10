@@ -11,6 +11,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@cloudflare/workers-oauth-provider": "^0.7.2",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@octokit/auth-app": "^8.2.0",
     "agents": "^0.15.0",

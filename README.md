@@ -1,65 +1,73 @@
 # Git Repo Auth MCP
 
-Worker-minted, short-lived, scoped GitHub App installation tokens over MCP.
+**Connect GitHub once. Your agent mints its own short-lived, scoped tokens after that.**
 
-**Currently GitHub; forge-agnostic by design.** v1 mints tokens via GitHub's App installation-token mechanism. The name leaves the door open to other forges; nothing more is implemented yet.
+A Cloudflare Worker that bridges MCP's OAuth to GitHub App installation tokens. Users click "Connect," log in with GitHub, and choose which account to bind. From then on, their MCP session can call one tool — `github_token` — which returns a ≤1-hour token scoped to *their* installation, optionally down-scoped per request.
 
-## What this is
+**Currently GitHub; forge-agnostic by design.**
 
-A small Cloudflare Worker exposing one MCP tool, `github_token`, that mints a ≤1-hour GitHub App installation token on demand — optionally down-scoped to specific repositories and permissions. Your AI agent calls the tool when it needs git or API access; the token expires on its own.
+## How the bridge works
 
-This replaces the pattern of minting personal access tokens by hand and pasting them into chat. **Expiry replaces rotation for the tokens. Rotation does not cease — it moves**: from a PAT that transits chat every session to an App private key that never transits anything and rotates rarely.
+1. An MCP client (Claude, etc.) connects to `/mcp` and is sent through a standard OAuth 2.1 flow (dynamic client registration, PKCE) served by this worker.
+2. Inside that flow, the user logs in with GitHub. The worker checks which installations of **this GitHub App** the user actually controls (`GET /user/installations` — GitHub filters by both app and user).
+3. Zero installations → the user is sent to install the app on their repos. One → bound automatically. Several → a picker.
+4. The grant is bound to that installation ID. Every later `github_token` call mints for that installation only. **GitHub enforces the walls**: a token minted for one installation physically cannot touch another's repositories.
 
-## Security model — read before deploying
+## Security model — read before trusting
 
-**The bearer token is the entire security boundary.** Anyone who can call this worker's MCP endpoint can mint write-capable tokens for every repository the App is installed on. There is no second gate. The worker fails closed: without `MCP_AUTH_TOKEN` configured it serves nothing. Treat `MCP_AUTH_TOKEN` with the same care as the private key.
+**What is never stored.** No GitHub tokens, ever. Installation tokens are minted on demand and die within the hour. The GitHub user token from login is used for two GET requests and discarded. The worker's state is: its own OAuth grants (hashed, in KV) and 10-minute pending records during account selection.
 
-**"No Administration" does not mean "cannot escalate."** The recommended App permissions (Contents RW, Pull requests RW, Workflows RW, Metadata R) exclude Administration, which blocks settings, visibility, and credential changes via the API directly. But Workflows write means token holders can modify CI, and CI runs with the repository's own `GITHUB_TOKEN` — an indirect escalation path. It is accepted, not eliminated: CI changes land in PRs and audit logs under the App's `[bot]` identity, where they are visible and attributable. If that trade-off doesn't fit your threat model, drop the Workflows permission when creating the App.
+**What the operator holds.** One GitHub App private key — their own, in worker secrets. Users never hand over keys. This is the standard model every CI service uses.
 
-**Your keys, your worker.** This is a self-host template. Nobody else custodies your App's private key — including the template's authors. Deploy it in your own Cloudflare account or don't deploy it.
+**Blast radius, honestly.** If this worker is compromised, the attacker gains minting capability over the repos of *every account that installed the app* — not their keys, not their accounts, but their installed scope, within the app's permission ceiling. Your kill switch as a user is first-class and unilateral: **uninstall the app**, and minting for your account ends instantly; outstanding tokens die within the hour. If that trust trade doesn't fit you, self-host your own instance (below) — it's the same code.
 
-**Kill switches:** uninstall the GitHub App, or delete the worker's secrets. Either one ends all minting immediately; outstanding tokens die within the hour.
+**"No Administration" ≠ "cannot escalate."** The recommended grant (Contents RW, PRs RW, Workflows RW, Metadata R) excludes Administration. But Workflows write means a token holder can modify CI, and CI runs with the repo's own credentials. The path is accepted, not eliminated: CI changes land in PRs and audit logs under the app's `[bot]` identity. Users who don't want the trade can simply not grant the app repos where it matters — or the operator can drop the Workflows permission app-wide.
 
-## Setup (~10 minutes)
+**Per-request enforcement.** The permission ceiling, repository scoping, one-hour expiry, and bot provenance are all enforced by GitHub, not by this code.
 
-1. **Create the GitHub App.** GitHub → Settings → Developer settings → GitHub Apps → New GitHub App. Webhook: off. Repository permissions: Contents **RW**, Pull requests **RW**, Workflows **RW** (optional — see security model), Metadata **R**. Nothing else; explicitly not Administration. Note the **App ID**.
-2. **Generate the private key.** GitHub downloads PKCS#1, but Workers WebCrypto requires PKCS#8 — convert before storing:
+## Connect (as a user)
+
+Add this server to your MCP client:
+
+```
+https://<deployment>/mcp
+```
+
+Your client will walk you through GitHub login and installation binding. Then ask your agent to call `github_token` when it needs git or API access.
+
+`github_token` parameters (both optional): `repositories` (names, no owner) and `permissions` (e.g. `{"contents":"read"}`) — each must be within what the app was granted and where it's installed.
+
+## Operate (run your own bridge)
+
+1. **Create a GitHub App** (Settings → Developer settings → GitHub Apps → New). Webhook off. Permissions: Contents **RW**, Pull requests **RW**, Workflows **RW** (optional — see security model), Metadata **R**. Nothing else; explicitly not Administration. Make the app **public** if others should be able to install it.
+2. **Enable user OAuth on the app:** set Callback URL to `https://<deployment>/callback`, then generate a **client secret** (App settings → Client secrets). Note the **Client ID**.
+3. **Convert the private key** (GitHub ships PKCS#1; Workers WebCrypto needs PKCS#8):
    ```sh
    openssl pkcs8 -topk8 -inform PEM -in your-app.private-key.pem -nocrypt -out app-pkcs8.pem
    ```
-   The key never transits chat, in either format. That exposure is irreversible.
-3. **Install the App** on the repositories it should serve. Note the **Installation ID** from the install URL (`.../installations/<id>`).
-4. **Set secrets** (never commit, never paste in chat):
+   The key never transits chat in either format.
+4. **Set the slug** in `wrangler.jsonc` (`GH_APP_SLUG`, from `github.com/apps/<slug>`) and create a KV namespace for the `OAUTH_KV` binding if the committed ID isn't yours: `wrangler kv namespace create OAUTH_KV`.
+5. **Secrets** (never committed, never pasted in chat):
    ```sh
    wrangler secret put GH_APP_ID
-   wrangler secret put GH_APP_INSTALLATION_ID
-   wrangler secret put GH_APP_PRIVATE_KEY   # paste the PKCS#8 PEM
-   wrangler secret put MCP_AUTH_TOKEN       # long random string, e.g. `openssl rand -hex 32`
+   wrangler secret put GH_APP_PRIVATE_KEY    # the PKCS#8 PEM
+   wrangler secret put GITHUB_CLIENT_ID
+   wrangler secret put GITHUB_CLIENT_SECRET
    ```
-5. **Deploy:** `npm install && npm run deploy`
-6. **Connect** your MCP client to `https://<your-worker>/mcp` with header `Authorization: Bearer <MCP_AUTH_TOKEN>`.
-7. **Do not retire existing PATs yet.** Retire them only after `github_token` is validated working — a failed deploy with no fallback credential is lockout.
+6. **Deploy:** `npm install && npm run deploy`
+7. Keep any existing PAT until the first real token mints. Retiring the fallback before validating the replacement is how lockouts happen.
 
-## The tool
-
-`github_token` — parameters, both optional:
-
-- `repositories`: array of repo names (without owner) to scope the token to. Omit for all installed repos.
-- `permissions`: permission map to down-scope, e.g. `{"contents": "read"}`. Must be a subset of the App's grant.
-
-Returns `{ token, expires_at, permissions, repository_selection }`. Use the token as a password for git-over-HTTPS (username `x-access-token`) or as a Bearer token against the GitHub REST API.
-
-Token caching is handled by `@octokit/auth-app`: expiry-aware and keyed on installation + repositories + permissions, so a broad cached token is never returned for a narrow request. The cache lives for the isolate's lifetime; cold starts mint fresh.
+Retired in v0.2: `MCP_AUTH_TOKEN` (replaced by per-user OAuth) and `GH_APP_INSTALLATION_ID` (now bound per grant).
 
 ## Development
 
 ```sh
 npm install
 npm run typecheck
-npm test           # auth-boundary unit tests
-npm run dev        # local server; put dev values in .dev.vars (gitignored)
+npm test
+npm run dev    # local; dummy values in .dev.vars (gitignored)
 ```
 
 ## License
 
-Deliberately not yet licensed (all rights reserved by default) — a licensing decision for this template is pending and will be made once, deliberately, rather than at midnight. Open an issue if you need clarity before then.
+Deliberately not yet licensed (all rights reserved by default) — a licensing decision is pending and will be made once, deliberately. Open an issue if you need clarity before then.
