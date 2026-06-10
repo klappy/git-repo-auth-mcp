@@ -36,6 +36,29 @@ curl -s -D- -o /dev/null https://api.github.com/rate_limit \
 
 ---
 
+## "Where's the PR?" — agent-created PRs don't appear in your GitHub app filters
+
+**Symptom.** An agent opened a PR using a token from `github_token`, but it's missing from your GitHub mobile/web filters: "Created by me" is empty, "Involved" is empty, and you need a direct link to find it.
+
+**Cause.** Working as designed, then under-finished. PRs created with installation tokens are authored by the app's bot identity (e.g. `git-repo-auth[bot]`) — that's the audit-trail provenance the security model promises. But bot authorship means *you* match none of GitHub's "my PRs" filters until you're explicitly attached to the thread.
+
+**Fix.** Have the agent attach you at creation time — two calls, both needing `pull_requests: write`:
+
+```sh
+curl -X POST https://api.github.com/repos/OWNER/REPO/issues/N/assignees \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"assignees":["YOUR_LOGIN"]}'
+curl -X POST https://api.github.com/repos/OWNER/REPO/pulls/N/requested_reviewers \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"reviewers":["YOUR_LOGIN"]}'
+```
+
+The PR then appears under your "Assigned to me" and "Review requested" filters, and you get the review-request notification. Bot provenance stays in the author field, where it belongs.
+
+*Observed 2026-06-10 — journal: `odd/ledger/2026-06-10-minted-seal-branding.md`.*
+
+---
+
 ## Token genuinely rejected (all requests 401, rate limit says 60)
 
 Not yet field-observed, but the expected causes in likelihood order: the token expired (≤1 hour by design — mint a fresh one, expiry *is* the rotation); the app was uninstalled from the account (the user's kill switch — minting ends instantly); or the requested repo/permission is outside what the installation granted (the `github_token` call itself errors in that case — see README "Per-request enforcement").

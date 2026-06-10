@@ -18,6 +18,12 @@ Session: favicon/logo for git-repo-auth-mcp, "everywhere" — MCP connector UIs,
 
 **[O] PIL variable-font axes are positional and font-specific: Archivo's order is [Weight, Width], not [Width, Weight].** First share-card render passed `[100, 800]` intending width=100/weight=800 and silently got weight=100 (near-thin headline). No error raised — values clamp to axis ranges. Fix: call `font.get_variation_axes()` first and order accordingly. Caught visually on the hover pass before commit; the second read changed the dive.
 
+**[O] PRs created with minted installation tokens are invisible to the operator's GitHub mobile filters.** The PR author is the app's bot identity (`git-repo-auth[bot]`), so "Created by me" excludes it, and "Involved" stays empty until the operator touches the thread. Observed 2026-06-10 when the captain could not find PR #2 in the app without a direct link. Fix applied (assignee + review request added to PR #2, both 201) and made procedure below.
+
+## Constraints (added)
+
+**[C] Every PR the crew opens with a minted token must assign the operator and request their review at creation time** — two API calls (`POST /issues/{n}/assignees`, `POST /pulls/{n}/requested_reviewers`, requires `pull_requests: write`). This is what makes crew-authored work surface in the operator's "Assigned to me" / "Review requested" filters; bot provenance stays honest in the author field while discoverability goes to the human who must review.
+
 ## Learnings
 
 **[L] 401-on-POST with 200-on-GET means suspect the request, not the token.** GitHub reports some malformed-request conditions as 401. Cheap discriminator: `GET /rate_limit` with the token and read `x-ratelimit-limit` — 8100 means an authenticated GitHub App context, 60 means anonymous. If the limit says authenticated, the token is fine and the failing request's headers/body are the problem. Worth knowing in *this* repo above all others, since "the token doesn't work" is exactly the bug report this bridge will attract.
