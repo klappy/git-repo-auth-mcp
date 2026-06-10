@@ -169,6 +169,20 @@ h2{font-family:var(--disp);font-variation-settings:'wdth' 76;font-weight:800;fon
 .use p b{color:var(--ink)}
 
 /* ---------- pricing ---------- */
+.tiers{margin-top:38px;display:grid;grid-template-columns:repeat(5,1fr);border:1.5px solid var(--ink);background:#fff}
+.tier{padding:24px 18px 26px;position:relative}
+.tier+.tier{border-left:1.5px solid var(--ink)}
+.tier h3{font-family:var(--mono);font-size:13px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--viridian);display:flex;align-items:center;gap:8px;margin-bottom:14px}
+.tier .price{font-size:32px;margin-bottom:6px}
+.tier .per{display:block;font-family:var(--mono);font-size:11.5px;color:var(--ink-soft);margin-bottom:16px;letter-spacing:.04em}
+.tier ul{list-style:none}
+.tier li{padding:8px 0;border-top:1px solid var(--line);font-size:13.5px;color:var(--ink-soft);display:flex;gap:9px;align-items:baseline}
+.tier li:first-of-type{border-top:none}
+.tier li .mk{font-family:var(--mono);font-size:12px;color:var(--viridian);flex:0 0 14px}
+.tier li b{color:var(--ink)}
+.tier.hot{background:var(--paper-deep);box-shadow:inset 0 3px 0 var(--amber)}
+@media (max-width:1024px){.tiers{grid-template-columns:1fr 1fr}.tier:nth-child(n+3){border-top:1.5px solid var(--ink)}.tier:nth-child(odd){border-left:none}.tier:nth-child(2){border-left:1.5px solid var(--ink)}}
+@media (max-width:560px){.tiers{grid-template-columns:1fr}.tier+.tier{border-left:none;border-top:1.5px solid var(--ink)}}
 .pricing{border-bottom:1.5px solid var(--ink)}
 .pricing .wrap{padding-top:64px;padding-bottom:72px}
 .price{font-family:var(--mono);font-size:42px;font-weight:600;margin-bottom:16px;letter-spacing:-.02em}
@@ -352,8 +366,8 @@ footer a{color:var(--viridian)}
     <p class="intro">Most credential tools bury their threat model. This one leads with it — because the people who should deploy this are exactly the people who will ask.</p>
     <div class="truths">
       <div class="truth">
-        <h3>One boundary, not two</h3>
-        <p>The MCP endpoint's bearer token is the <b>entire</b> security boundary. Anyone holding it can mint write tokens for every installed repo. The worker fails closed — no bearer configured, nothing served. Guard <b>MCP_AUTH_TOKEN</b> like the private key itself.</p>
+        <h3>Your grant is the boundary</h3>
+        <p>Each connection is bound by OAuth to <b>one user, one installation</b> — a minted token physically cannot reach another account's repositories; GitHub enforces the walls. The worker stores no GitHub tokens, ever: its only state is its own hashed grants and your quota accounting.</p>
       </div>
       <div class="truth">
         <h3>"No admin" ≠ "can't escalate"</h3>
@@ -371,30 +385,64 @@ footer a{color:var(--viridian)}
 <section class="pricing" id="pricing">
   <div class="wrap">
     <p class="sec-label">The deal, stated plainly</p>
-    <h2>Host your own for free. Or use ours for a dollar a month.</h2>
-    <div class="compare">
-      <div class="col good">
-        <h3>Self-host <span class="tag">Your keys</span></h3>
-        <p class="price">$0 <span>forever</span></p>
+    <h2>How big is your agentic concurrency?</h2>
+    <p style="margin-top:16px;font-size:16px;color:var(--ink-soft);max-width:62ch">Tokens live one hour, so tokens-per-window is how many agents can work your repos <b style="color:var(--ink)">at the same time</b>. Every tier is one human, no seats &mdash; <b style="color:var(--ink)">the team is your agents</b>, and the per-agent price falls as you climb. Every response shows <span class="mono">remaining</span> and <span class="mono">window_reset_at</span>, so the wall is never a surprise.</p>
+    <!-- Hero-number rule: the big figure is ALWAYS the per-month price.
+         Source of truth: governance/external/tiers.md — script re-renders
+         quotas AND prices from a live fetch of that doc; these cards are the
+         static mirror. -->
+    <div class="tiers" id="tierCards">
+      <div class="tier" data-tier="Free">
+        <h3>Free</h3>
+        <p class="price">$0</p>
+        <span class="per">one-time trial &mdash; no card</span>
         <ul>
-          <li><span class="mk">&#10003;</span>Same code, your GitHub App, your worker. Nothing of yours touches anyone else's infrastructure.</li>
-          <li><span class="mk">&#10003;</span>Zero shared trust &mdash; the bearer token, the private key, and the blast radius are all yours.</li>
-          <li><span class="mk">&#10003;</span>The setup script below is the entire runbook.</li>
+          <li><span class="mk">&#10003;</span><span>Bucket of <b data-slot="quota">50 mints</b>, total</span></li>
+          <li><span class="mk">&#10003;</span><span>No decay &mdash; a clean wall, then you decide</span></li>
         </ul>
-        <a class="btn" href="#setup">Run your own</a>
       </div>
-      <div class="col good">
-        <h3>Hosted <span class="tag">$1 / month</span></h3>
-        <p class="price">$24 <span>for two years</span></p>
+      <div class="tier hot" data-tier="Solo">
+        <h3>Solo</h3>
+        <p class="price" data-slot="price">$1</p>
+        <span class="per">per month &mdash; $24 billed every 2 years</span>
         <ul>
-          <li><span class="mk">&#10003;</span>Connect in a minute. We run the worker; you keep the kill switch.</li>
-          <li><span class="mk">&#10003;</span>Same boundary as self-host: your repos, your app installation, two-click reversal.</li>
-          <li><span class="mk">&#10003;</span>You can do it yourself. At this price, why would you?</li>
+          <li><span class="mk">&#10003;</span><span><b data-slot="quota">5</b> agents at once</span></li>
+          <li><span class="mk">&#10003;</span><span>All 5 in the first hour, or one an hour</span></li>
+          <li><span class="mk">&#10003;</span><span>$0.20 per agent slot</span></li>
         </ul>
-        <a class="btn btn-primary" href="#setup">Connect your agent</a>
+      </div>
+      <div class="tier" data-tier="Pro">
+        <h3>Pro</h3>
+        <p class="price" data-slot="price">$5</p>
+        <span class="per">per month &mdash; $60 billed yearly</span>
+        <ul>
+          <li><span class="mk">&#10003;</span><span><b data-slot="quota">30</b> agents at once</span></li>
+          <li><span class="mk">&#10003;</span><span>5x the price, <b>6x</b> the agents</span></li>
+          <li><span class="mk">&#10003;</span><span>$0.167 per agent slot</span></li>
+        </ul>
+      </div>
+      <div class="tier" data-tier="Team">
+        <h3>Team</h3>
+        <p class="price" data-slot="price">$25</p>
+        <span class="per">per month</span>
+        <ul>
+          <li><span class="mk">&#10003;</span><span><b data-slot="quota">200</b> agents at once</span></li>
+          <li><span class="mk">&#10003;</span><span>A team of agents &mdash; one human, no seats</span></li>
+          <li><span class="mk">&#10003;</span><span>$0.125 per agent slot</span></li>
+        </ul>
+      </div>
+      <div class="tier" data-tier="Fleet">
+        <h3>Fleet</h3>
+        <p class="price" data-slot="price">$100</p>
+        <span class="per">per month</span>
+        <ul>
+          <li><span class="mk">&#10003;</span><span><b data-slot="quota">1,000</b> agents at once</span></li>
+          <li><span class="mk">&#10003;</span><span>Never think about the window again</span></li>
+          <li><span class="mk">&#10003;</span><span>$0.10 per agent slot</span></li>
+        </ul>
       </div>
     </div>
-    <p class="kill"><b>$</b> Audit the codebase &mdash; or ask your agents to. That's why it's open.</p>
+    <p class="kill" style="margin-top:22px"><b>$</b> Re-requesting the same scope while a token is live is always free. Prices and quotas render from <a href="https://github.com/klappy/git-repo-auth-mcp/blob/main/governance/external/tiers.md" target="_blank" rel="noopener">the governance document the server enforces</a>. Prefer your own keys? <a href="#setup">Self-host for $0, forever</a> &mdash; same code.</p>
   </div>
 </section>
 
@@ -529,6 +577,32 @@ openssl pkcs8 -topk8 -inform PEM \
   }
   wireCopy('copyClone', function(){ return document.getElementById('cloneCmd').textContent; });
   wireCopy('copySetup', function(){ return document.getElementById('setupCode').innerText; });
+
+  // ----- pricing cards: render from the governance doc the server enforces -----
+  // Static cards above are a mirror/fallback; tiers.md is the source of truth.
+  fetch('https://raw.githubusercontent.com/klappy/git-repo-auth-mcp/main/governance/external/tiers.md')
+    .then(function(r){ return r.ok ? r.text() : Promise.reject(); })
+    .then(function(md){
+      var bucket = md.match(/bucket of \*\*(\d+) mints? total\*\*/i);
+      var re = /^\|\s*(Solo|Pro|Team|Fleet)\s*\|\s*\*\*([\d,]+)\*\*\s*\|\s*([\d,]+)\s*\|\s*(\$[\d.]+)\/mo[^|]*\|/gim, m;
+      var rows = {};
+      while ((m = re.exec(md))) rows[m[1]] = { quota: m[2], weekly: m[3], price: m[4] };
+      if (bucket){
+        var fq = document.querySelector('[data-tier="Free"] [data-slot="quota"]');
+        if (fq) fq.textContent = bucket[1] + ' mints';
+      }
+      Object.keys(rows).forEach(function(name){
+        var card = document.querySelector('[data-tier="' + name + '"]');
+        if (!card) return;
+        var p = card.querySelector('[data-slot="price"]');
+        var q = card.querySelector('[data-slot="quota"]');
+        var w = card.querySelector('[data-slot="weekly"]');
+        if (p) p.textContent = rows[name].price;
+        if (q) q.textContent = rows[name].quota;
+        if (w) w.textContent = rows[name].weekly;
+      });
+    })
+    .catch(function(){ /* mirror stands */ });
 })();
 </script>
 </body>
