@@ -57,3 +57,7 @@ Solo: $1/month, billed $24 per two years, with the 5-tokens-per-5-hour-window qu
 ## [D] Final ladder (ratified): Solo / Pro / Team / Fleet — named for agentic concurrency, discounted per slot as you climb
 
 Solo 5 @ $1/mo ($24 per 2 years), Pro 30 @ $5, Team 200 @ $25, Fleet 1,000 @ $100; weekly backstops at 12x window. Per-slot price falls monotonically ($0.20 / $0.167 / $0.125 / $0.10) so scale is rewarded, never punished. Multiplier names (Max 5x/20x) retired: they had drifted to multiplying *price*, which is anti-marketing. Tier names now answer the captain's framing question — "how big is your agentic concurrency?" — and every tier is one human, no seats; Team and Fleet are teams and fleets of agents. KV accounting is sufficient through Team; a Fleet customer at full tilt triggers the Durable Object counter swap already logged as an open item (interface unchanged).
+
+## [D] Billing cadence: commitment scales down the ladder
+
+Solo bills $24 per two years, Pro bills $60 per year, Team and Fleet bill monthly. The cheap tiers buy commitment (and amortize Stripe's per-transaction overhead, which would eat a literal $1 monthly charge); the expensive tiers stay easy to start and easy to cancel, which is what a team evaluating a fleet of agents actually wants. Hero-number rule unchanged: the per-month figure stays the hero, the billed total is fine print.

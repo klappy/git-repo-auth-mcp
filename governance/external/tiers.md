@@ -14,11 +14,11 @@ How big is your agentic concurrency? Every tier is one human, no seats — the t
 |---|---|---|---|
 | Free | one-time bucket of **50 mints total** | — | $0 |
 | Solo | **5** | 60 | $1/mo ($24 per 2 years) |
-| Pro | **30** | 360 | $5/mo |
+| Pro | **30** | 360 | $5/mo ($60 per year) |
 | Team | **200** | 2,400 | $25/mo |
 | Fleet | **1,000** | 12,000 | $100/mo |
 
-Solo is the deal that started this: a dollar a month, billed $24 for two years. Above it, the per-slot price falls as you climb — $0.20 at Solo, $0.167 at Pro, $0.125 at Team, $0.10 at Fleet — so upgrading is always the better deal per agent. No bundling tricks, no "contact sales."
+Billing cadence scales with commitment: Solo is $1/mo billed $24 per two years, Pro is $5/mo billed $60 per year, Team and Fleet are month-to-month. Above it, the per-slot price falls as you climb — $0.20 at Solo, $0.167 at Pro, $0.125 at Team, $0.10 at Fleet — so upgrading is always the better deal per agent. No bundling tricks, no "contact sales."
 
 ## How the free bucket works
 
