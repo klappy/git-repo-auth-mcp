@@ -14,3 +14,27 @@ describe("state round-trip", () => {
     expect(() => decodeState("!!!not-state!!!")).toThrow();
   });
 });
+
+import { generateKeyPairSync } from "node:crypto";
+import { normalizePrivateKey } from "../src/keys";
+
+describe("normalizePrivateKey", () => {
+  it("converts PKCS#1 to PKCS#8", () => {
+    const { privateKey } = generateKeyPairSync("rsa", {
+      modulusLength: 2048,
+      privateKeyEncoding: { type: "pkcs1", format: "pem" },
+      publicKeyEncoding: { type: "spki", format: "pem" },
+    });
+    const out = normalizePrivateKey(privateKey);
+    expect(out).toContain("BEGIN PRIVATE KEY");
+    expect(out).not.toContain("BEGIN RSA PRIVATE KEY");
+  });
+  it("passes PKCS#8 through untouched", () => {
+    const { privateKey } = generateKeyPairSync("rsa", {
+      modulusLength: 2048,
+      privateKeyEncoding: { type: "pkcs8", format: "pem" },
+      publicKeyEncoding: { type: "spki", format: "pem" },
+    });
+    expect(normalizePrivateKey(privateKey).trim()).toBe(privateKey.trim());
+  });
+});

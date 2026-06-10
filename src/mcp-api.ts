@@ -9,6 +9,7 @@ import { createMcpHandler } from "agents/mcp";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { createAppAuth } from "@octokit/auth-app";
+import { normalizePrivateKey } from "./keys";
 import type { Env, GrantProps } from "./types";
 
 type AppAuth = ReturnType<typeof createAppAuth>;
@@ -24,7 +25,7 @@ function getAppAuth(env: Env): AppAuth {
   }
   appAuth ??= createAppAuth({
     appId: env.GH_APP_ID,
-    privateKey: env.GH_APP_PRIVATE_KEY,
+    privateKey: normalizePrivateKey(env.GH_APP_PRIVATE_KEY),
   });
   return appAuth;
 }

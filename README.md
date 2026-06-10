@@ -41,11 +41,7 @@ Your client will walk you through GitHub login and installation binding. Then as
 
 1. **Create a GitHub App** (Settings → Developer settings → GitHub Apps → New). Webhook off. Permissions: Contents **RW**, Pull requests **RW**, Workflows **RW** (optional — see security model), Metadata **R**. Nothing else; explicitly not Administration. Make the app **public** if others should be able to install it.
 2. **Enable user OAuth on the app:** set Callback URL to `https://<deployment>/callback`, then generate a **client secret** (App settings → Client secrets). Note the **Client ID**.
-3. **Convert the private key** (GitHub ships PKCS#1; Workers WebCrypto needs PKCS#8):
-   ```sh
-   openssl pkcs8 -topk8 -inform PEM -in your-app.private-key.pem -nocrypt -out app-pkcs8.pem
-   ```
-   The key never transits chat in either format.
+3. **Generate the private key.** Paste it as-is — the worker auto-converts GitHub's PKCS#1 format to the PKCS#8 that WebCrypto needs. (Manual fallback if ever needed: `openssl pkcs8 -topk8 -inform PEM -in key.pem -nocrypt`.) The key never transits chat in any format.
 4. **Set the slug** in `wrangler.jsonc` (`GH_APP_SLUG`, from `github.com/apps/<slug>`) and create a KV namespace for the `OAUTH_KV` binding if the committed ID isn't yours: `wrangler kv namespace create OAUTH_KV`.
 5. **Secrets** (never committed, never pasted in chat):
    ```sh
