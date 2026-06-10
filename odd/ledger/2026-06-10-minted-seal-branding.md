@@ -4,13 +4,19 @@ Session: favicon/logo for git-repo-auth-mcp, "everywhere" — MCP connector UIs,
 
 ## Decisions
 
-**[D] The mark is "the minted seal."** Viridian seal ring on paper, ink key, amber strike in the bow. Rationale: no canon governs MCP-server visual identity (searched before designing), so the mark derives from the server's own established landing-page identity — palette `#FAFAF6` paper / `#16201B` ink / `#0E5A4A` viridian / `#D9A441` amber, banknote/security-document language, guilloche rings — and from the product thesis itself: tokens minted on demand that die on their own. Master artwork is `public/favicon.svg`; `favicon.ico` carries 16/32/48 (what connector UIs and tabs fetch); `apple-touch-icon.png` + 192/512 PNGs + `site.webmanifest` cover installed contexts. All static via the Worker's existing `assets` binding — zero code change, so the release-validation gate's code-path concerns don't apply, but the PR still waits for the captain's review.
+**[D] The mark is "the struck coin" (v2), superseding the minted seal (v1) within this same PR.** Captain reviewed both side by side at 16/32/180 and chose v2. What changed and why: v1 spent its pixels on framing (tile border + seal ring) and carried a generic key; v2 inverts it — solid viridian coin fills the canvas, the key is reversed out in paper, and the bow is a dial with an amber hand, putting the product's one distinctive idea (tokens expire on their own) at the center of the mark. Same four site colors. Master is `public/favicon.svg` (v2); full raster set regenerated from it. v1 never shipped to main, so no external supersession concerns.
+
+**[D] Social sharing: OG/Twitter card meta + a 1200×630 share card at `public/og-image.png`.** Card is composed in the site's own banknote language — paper, corner guilloche, certificate hairline frame, the struck coin, Archivo 820-weight headline, Plex Mono body, and a stamp-red "EXPIRES ≤ 1 HOUR" badge. Canonical/og URLs anchor to `https://gitauth.klappy.dev/` (verified live, 200, correct title, this session). Rationale: link unfurls are the first impression for a trust-sensitive tool; the card states the trust claim (expiry) visually before a word is read.
+
+**[D] The minted-seal decision (v1), original rationale preserved for the record:** viridian seal ring on paper, ink key, amber strike — derived from the landing page's palette because no canon governs MCP-server visual identity. Superseded by the struck coin above; the derivation logic (mark from the server's own identity) carries forward unchanged.
 
 ## Observations
 
 **[O] GitHub REST POST returned 401 with a valid installation token until `Content-Type: application/json` was sent explicitly.** POST `/repos/{owner}/{repo}/pulls` failed twice ("Requires authentication", both `Bearer` and `token` schemes) while GETs with the same token returned 200 with authenticated rate limits (`x-ratelimit-limit: 8100`). Adding the explicit header produced 201 immediately. Why it matters: curl's default for `--data` is `application/x-www-form-urlencoded`, and GitHub reports the malformed-body condition as an auth failure rather than 400/422 — which misdirects debugging toward the token and, in this project specifically, toward suspecting the bridge's minting. The bridge was innocent. Full diagnostic path in `docs/troubleshooting.md`.
 
 **[O] Sibling favicon census (2026-06-10).** oddkit.klappy.dev serves `/favicon.ico` and `/favicon.svg` (embedded PNG mascot); ams, aquifer, and gitauth served none at the time of the census. Recorded because it establishes there is no shared family mark to inherit — each server's identity is its own — and because gitauth's 404s were the gap this session closed.
+
+**[O] PIL variable-font axes are positional and font-specific: Archivo's order is [Weight, Width], not [Width, Weight].** First share-card render passed `[100, 800]` intending width=100/weight=800 and silently got weight=100 (near-thin headline). No error raised — values clamp to axis ranges. Fix: call `font.get_variation_axes()` first and order accordingly. Caught visually on the hover pass before commit; the second read changed the dive.
 
 ## Learnings
 
