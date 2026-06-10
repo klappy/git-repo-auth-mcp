@@ -64,6 +64,10 @@ npm test
 npm run dev    # local; dummy values in .dev.vars (gitignored)
 ```
 
+## Troubleshooting & project journal
+
+Field-observed failures and fixes live in [`docs/troubleshooting.md`](docs/troubleshooting.md) — start there if a token "doesn't work." The evidence behind each entry is the project journal under [`odd/ledger/`](odd/ledger/): dated DOLCHEO records of what was observed, learned, and decided. New observations go to the journal first, then get distilled into troubleshooting.
+
 ## License
 
 Deliberately not yet licensed (all rights reserved by default) — a licensing decision is pending and will be made once, deliberately. Open an issue if you need clarity before then.
