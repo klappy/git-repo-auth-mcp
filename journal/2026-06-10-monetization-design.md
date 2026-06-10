@@ -20,3 +20,16 @@ Two planning-stage identity claims died on contact with the repo. Planning assum
 ## Disposition
 
 Governance PR opened for captain review. Build follows in a separate execution against `governance/SPEC.md`, validated with a context break per `verification-requires-fresh-context`.
+
+## Addendum — same day, build executed in isolation
+
+Captain's call: don't wait on shared klappy.dev billing rails; ship metering self-contained in this repo. Built on the same branch:
+
+- `src/quota.ts` — policy parsed from `governance/external/tiers.md` at runtime (live → bundled snapshot → fail loud, per core-governance-baseline; `governance_source` declared on every decision). KV accounting: free bucket, append-only mint log, live-token scope records (same-scope re-mints are cache hits, uncounted). Sliding 5-hour window; `tiers.md` wording aligned to match (doc wins).
+- `src/billing.ts` — Stripe with zero SDK (borrow-evaluation: the substrate is Stripe's HTTP API; the SDK is ballast in a worker). WebCrypto webhook signature verification with timing-safe compare and 5-minute tolerance; idempotent tier mirroring into KV; meter events via fetch in waitUntil — metering is analytics, never availability.
+- `src/docs.ts` + `docs` MCP tool — governance/external served verbatim, live → bundled (P0004).
+- `src/mcp-api.ts` — quota gate around the mint, transparency fields (`quota.{tier, remaining, window_reset_at, weekly_remaining, cached, governance_source}`), quota-exceeded wall with `upgrade_url`. v0.3.0.
+- Enforcement feature-flagged (`QUOTA_ENFORCE`, ships "false"): accounting observes first, per build order.
+- Evidence: `tsc --noEmit` clean; 9/9 vitest (bundled-doc parse asserts 50/5-60/25-300/100-1200 so doc drift fails CI; scopeKey order-insensitivity; webhook signature accept/reject/expiry); `wrangler deploy --dry-run` bundles with the Text rule.
+
+Not done here, deliberately: Stripe products/prices (blocked on captain pricing), webhook endpoint registration in the Stripe dashboard, production deploy. Release follows klappy://canon/constraints/release-validation-gate — validation needs a fresh context, not this session's smoke.

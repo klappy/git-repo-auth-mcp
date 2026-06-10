@@ -4,6 +4,9 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-06-01",
   "compatibility_flags": ["nodejs_compat"],
+  // Governance docs are bundled as text: the build-time snapshot tier of the
+  // live -> bundled -> fail-loud policy resolution (core-governance-baseline).
+  "rules": [{ "type": "Text", "globs": ["**/*.md"], "fallthrough": true }],
   "observability": { "enabled": true },
   "assets": { "directory": "./public" },
   "kv_namespaces": [
@@ -11,8 +14,13 @@
   ],
   "vars": {
     // Public slug of your GitHub App (from its URL: github.com/apps/<slug>)
-    "GH_APP_SLUG": "git-repo-auth"
+    "GH_APP_SLUG": "git-repo-auth",
+    // Metering ships observe-only; flip to "true" to enforce quotas.
+    "QUOTA_ENFORCE": "false"
   }
+  // Billing secrets (optional; worker runs unbilled without them):
+  //   STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET
+  // Billing vars (optional): STRIPE_METER_EVENT, STRIPE_UPGRADE_URL, STRIPE_PRICE_MAP
   // Secrets (set via `wrangler secret put`, never committed, never in chat):
   //   GH_APP_ID, GH_APP_PRIVATE_KEY (PKCS#8),
   //   GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET

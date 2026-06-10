@@ -16,6 +16,7 @@
 
 import type { AuthRequest } from "@cloudflare/workers-oauth-provider";
 import { encodeState, decodeState } from "./state";
+import { handleStripeWebhook } from "./billing";
 import type { Env } from "./types";
 
 const GH = "https://api.github.com";
@@ -76,6 +77,11 @@ export const GitHubAuthHandler = {
     const url = new URL(request.url);
 
     if (url.pathname === "/healthz") return new Response("ok", { status: 200 });
+
+    // ---- Stripe billing webhook (signature-verified, idempotent) ----
+    if (url.pathname === "/webhooks/stripe" && request.method === "POST") {
+      return handleStripeWebhook(request, env);
+    }
 
     // ---- MCP client begins authorization ----
     if (url.pathname === "/authorize") {

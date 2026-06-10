@@ -21,7 +21,7 @@ You get 50 mints, once. No windows, no decay, no daily trickle. Use all 50 in an
 
 ## How paid windows work
 
-- The 5-hour window is **rolling**: it opens at your first mint and resets five hours later. Mint your quota early and you wait; spread them out and you may never notice the window.
+- The 5-hour window is **rolling**: each mint counts against you for exactly five hours, then falls off. `window_reset_at` tells you when your next slot frees. Mint your quota in a burst and you wait; spread mints out and you may never notice the window.
 - The **weekly backstop** exists for abuse protection. It is set high enough (12× the window quota) that normal use never touches it.
 - **Cached tokens are free.** Re-requesting the same scope while a previous token is still alive returns the cached token and does not count as a mint. Retries cost you nothing.
 
