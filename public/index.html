@@ -333,8 +333,8 @@ footer a{color:var(--viridian)}
     <p class="intro">Most credential tools bury their threat model. This one leads with it — because the people who should deploy this are exactly the people who will ask.</p>
     <div class="truths">
       <div class="truth">
-        <h3>One boundary, not two</h3>
-        <p>The MCP endpoint's bearer token is the <b>entire</b> security boundary. Anyone holding it can mint write tokens for every installed repo. The worker fails closed — no bearer configured, nothing served. Guard <b>MCP_AUTH_TOKEN</b> like the private key itself.</p>
+        <h3>Your grant is the boundary</h3>
+        <p>Each connection is bound by OAuth to <b>one user, one installation</b> — a minted token physically cannot reach another account's repositories; GitHub enforces the walls. The worker stores no GitHub tokens, ever: its only state is its own hashed grants and your quota accounting.</p>
       </div>
       <div class="truth">
         <h3>"No admin" ≠ "can't escalate"</h3>
@@ -352,30 +352,54 @@ footer a{color:var(--viridian)}
 <section class="pricing" id="pricing">
   <div class="wrap">
     <p class="sec-label">The deal, stated plainly</p>
-    <h2>Host your own for free. Or use ours for a dollar a month.</h2>
+    <h2>Self-host for free. Try hosted for free. Pay for concurrency.</h2>
     <div class="compare">
       <div class="col good">
         <h3>Self-host <span class="tag">Your keys</span></h3>
         <p class="price">$0 <span>forever</span></p>
         <ul>
           <li><span class="mk">&#10003;</span>Same code, your GitHub App, your worker. Nothing of yours touches anyone else's infrastructure.</li>
-          <li><span class="mk">&#10003;</span>Zero shared trust &mdash; the bearer token, the private key, and the blast radius are all yours.</li>
+          <li><span class="mk">&#10003;</span>Zero shared trust &mdash; the private key and the blast radius are yours alone.</li>
           <li><span class="mk">&#10003;</span>The setup script below is the entire runbook.</li>
         </ul>
         <a class="btn" href="#setup">Run your own</a>
       </div>
       <div class="col good">
-        <h3>Hosted <span class="tag">$1 / month</span></h3>
-        <p class="price">$24 <span>for two years</span></p>
+        <h3>Hosted free <span class="tag">No card</span></h3>
+        <p class="price">50 <span>mints, one-time bucket</span></p>
         <ul>
-          <li><span class="mk">&#10003;</span>Connect in a minute. We run the worker; you keep the kill switch.</li>
-          <li><span class="mk">&#10003;</span>Same boundary as self-host: your repos, your app installation, two-click reversal.</li>
-          <li><span class="mk">&#10003;</span>You can do it yourself. At this price, why would you?</li>
+          <li><span class="mk">&#10003;</span>Connect in a minute and genuinely feel it &mdash; burn all 50 in an hour or spread them over a month.</li>
+          <li><span class="mk">&#10003;</span>No decay, no daily trickle. When the bucket is empty, you decide: upgrade or walk.</li>
+          <li><span class="mk">&#10003;</span>Re-requesting the same scope while a token is live is free &mdash; retries never cost you.</li>
         </ul>
         <a class="btn btn-primary" href="#setup">Connect your agent</a>
       </div>
     </div>
-    <p class="kill"><b>$</b> Audit the codebase &mdash; or ask your agents to. That's why it's open.</p>
+
+    <div style="margin-top:38px">
+      <h3 class="mono" style="font-size:13px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--viridian);margin-bottom:14px">Paid tiers &mdash; you're buying concurrency</h3>
+      <p style="font-size:15px;color:var(--ink-soft);max-width:64ch;margin-bottom:18px">Tokens live one hour, so tokens-per-window is how many agents can work your repos at once. Every response tells you exactly where you stand &mdash; <span class="mono">remaining</span>, <span class="mono">window_reset_at</span>, <span class="mono">cached</span>. The wall is never a surprise.</p>
+      <!-- Source of truth: governance/external/tiers.md (the server enforces the same
+           document). The rows below are a static mirror; script replaces them with a
+           live fetch of the doc so the page cannot drift from what is enforced. -->
+      <table id="tierTable" style="width:100%;border:1.5px solid var(--ink);border-collapse:collapse;background:#fff;font-size:15px">
+        <thead>
+          <tr style="background:var(--viridian);color:var(--paper)">
+            <th style="text-align:left;padding:12px 16px;font-family:var(--mono);font-size:12px;letter-spacing:.1em;text-transform:uppercase">Tier</th>
+            <th style="text-align:left;padding:12px 16px;font-family:var(--mono);font-size:12px;letter-spacing:.1em;text-transform:uppercase">Tokens / 5-hr window</th>
+            <th style="text-align:left;padding:12px 16px;font-family:var(--mono);font-size:12px;letter-spacing:.1em;text-transform:uppercase">Weekly backstop</th>
+            <th style="text-align:left;padding:12px 16px;font-family:var(--mono);font-size:12px;letter-spacing:.1em;text-transform:uppercase">Means</th>
+          </tr>
+        </thead>
+        <tbody class="mono" style="font-size:14px">
+          <tr><td style="padding:12px 16px;border-top:1px solid var(--line)">Free</td><td style="padding:12px 16px;border-top:1px solid var(--line)">one-time bucket of 50</td><td style="padding:12px 16px;border-top:1px solid var(--line)">&mdash;</td><td style="padding:12px 16px;border-top:1px solid var(--line)">try it for real</td></tr>
+          <tr><td style="padding:12px 16px;border-top:1px solid var(--line)">Pro</td><td style="padding:12px 16px;border-top:1px solid var(--line)">5</td><td style="padding:12px 16px;border-top:1px solid var(--line)">60</td><td style="padding:12px 16px;border-top:1px solid var(--line)">~5 concurrent agents</td></tr>
+          <tr><td style="padding:12px 16px;border-top:1px solid var(--line)">Max 5x</td><td style="padding:12px 16px;border-top:1px solid var(--line)">25</td><td style="padding:12px 16px;border-top:1px solid var(--line)">300</td><td style="padding:12px 16px;border-top:1px solid var(--line)">team / heavy solo</td></tr>
+          <tr><td style="padding:12px 16px;border-top:1px solid var(--line)">Max 20x</td><td style="padding:12px 16px;border-top:1px solid var(--line)">100</td><td style="padding:12px 16px;border-top:1px solid var(--line)">1,200</td><td style="padding:12px 16px;border-top:1px solid var(--line)">a fleet</td></tr>
+        </tbody>
+      </table>
+      <p class="kill" style="margin-top:18px"><b>$</b> Per-tier prices land at launch. The quotas above are read from <a href="https://github.com/klappy/git-repo-auth-mcp/blob/main/governance/external/tiers.md" target="_blank" rel="noopener">the same governance document the server enforces</a> &mdash; ask your agent's <span class="mono">docs</span> tool about "tiers" and it reads it too.</p>
+    </div>
   </div>
 </section>
 
@@ -510,6 +534,25 @@ openssl pkcs8 -topk8 -inform PEM \
   }
   wireCopy('copyClone', function(){ return document.getElementById('cloneCmd').textContent; });
   wireCopy('copySetup', function(){ return document.getElementById('setupCode').innerText; });
+
+  // ----- pricing table: render from the governance doc the server enforces -----
+  // Static rows above are a mirror/fallback; the doc is the source of truth.
+  fetch('https://raw.githubusercontent.com/klappy/git-repo-auth-mcp/main/governance/external/tiers.md')
+    .then(function(r){ return r.ok ? r.text() : Promise.reject(); })
+    .then(function(md){
+      var bucket = md.match(/bucket of \*\*(\d+) mints? total\*\*/i);
+      var rows = [], re = /^\|\s*(Pro|Max 5x|Max 20x)\s*\|\s*\*\*(\d+)\*\*\s*\|\s*([\d,]+)\s*\|/gim, m;
+      while ((m = re.exec(md))) rows.push(m);
+      if (!bucket || rows.length < 3) return; // doc shape changed: keep the mirror
+      var meaning = { 'Pro': '~5 concurrent agents', 'Max 5x': 'team / heavy solo', 'Max 20x': 'a fleet' };
+      function td(t){ return '<td style="padding:12px 16px;border-top:1px solid var(--line)">' + t + '</td>'; }
+      var html = '<tr>' + td('Free') + td('one-time bucket of ' + bucket[1]) + td('&mdash;') + td('try it for real') + '</tr>';
+      rows.forEach(function(r){
+        html += '<tr>' + td(r[1]) + td(r[2]) + td(r[3]) + td(meaning[r[1]] || '') + '</tr>';
+      });
+      document.querySelector('#tierTable tbody').innerHTML = html;
+    })
+    .catch(function(){ /* mirror stands */ });
 })();
 </script>
 </body>
