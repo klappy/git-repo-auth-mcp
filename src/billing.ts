@@ -148,3 +148,15 @@ export async function emitMeterEvent(env: Env, login: string, nowMs = Date.now()
     /* metering is analytics, never availability */
   }
 }
+
+/** Tier → hosted payment link, from STRIPE_PAYMENT_LINKS. */
+export function paymentLinkFor(env: Env, tier: string): string | undefined {
+  if (!env.STRIPE_PAYMENT_LINKS) return undefined;
+  try {
+    const map = JSON.parse(env.STRIPE_PAYMENT_LINKS) as Record<string, string>;
+    const link = map[tier];
+    return typeof link === "string" && link.startsWith("https://") ? link : undefined;
+  } catch {
+    return undefined;
+  }
+}

@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { parseTiersDoc, scopeKey } from "../src/quota";
-import { verifyStripeSignature } from "../src/billing";
+import { verifyStripeSignature, paymentLinkFor } from "../src/billing";
 
 const tiersDoc = readFileSync("governance/external/tiers.md", "utf8");
 
@@ -47,5 +47,17 @@ describe("stripe webhook signature", () => {
     expect(await verifyStripeSignature(payload + " ", header, secret)).toBe(false);
     expect(await verifyStripeSignature(payload, `t=${t - 9999},v1=${v1}`, secret)).toBe(false);
     expect(await verifyStripeSignature(payload, null, secret)).toBe(false);
+  });
+});
+
+describe("paymentLinkFor", () => {
+  const env = {
+    STRIPE_PAYMENT_LINKS: '{"solo":"https://buy.stripe.com/a","pro":"https://buy.stripe.com/b"}',
+  } as unknown as import("../src/types").Env;
+  it("maps known tiers and rejects unknown or non-https", () => {
+    expect(paymentLinkFor(env, "solo")).toBe("https://buy.stripe.com/a");
+    expect(paymentLinkFor(env, "fleet")).toBeUndefined();
+    const bad = { STRIPE_PAYMENT_LINKS: '{"solo":"javascript:alert(1)"}' } as unknown as import("../src/types").Env;
+    expect(paymentLinkFor(bad, "solo")).toBeUndefined();
   });
 });

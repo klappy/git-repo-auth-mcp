@@ -30,6 +30,8 @@ export interface Env {
   STRIPE_UPGRADE_URL?: string;
   /** JSON map of Stripe price id → tier id, e.g. {"price_123":"pro"}. */
   STRIPE_PRICE_MAP?: string;
+  /** JSON map of tier id → hosted payment link, e.g. {"pro":"https://buy.stripe.com/..."}. */
+  STRIPE_PAYMENT_LINKS?: string;
 }
 
 /** Decrypted per-grant props, set at authorization, delivered on every API call. */

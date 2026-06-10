@@ -19,8 +19,10 @@
     "QUOTA_ENFORCE": "false",
     // Stripe price id -> tier id (live mode, Covenynt Ventures LLC)
     "STRIPE_PRICE_MAP": "{\"price_1TgrOHPHZ1kOt0d4ROZOt0rZ\":\"solo\",\"price_1TgrONPHZ1kOt0d4XvuAPXsh\":\"pro\",\"price_1TgrOUPHZ1kOt0d4ki14AGCo\":\"team\",\"price_1TgrOcPHZ1kOt0d4CtxsK6QA\":\"fleet\"}",
-    // Where the quota wall sends people (login appended as client_reference_id)
-    "STRIPE_UPGRADE_URL": "https://gitauth.klappy.dev/#pricing"
+    // Where the quota wall sends people
+    "STRIPE_UPGRADE_URL": "https://gitauth.klappy.dev/#pricing",
+    // Tier id -> hosted payment link; /buy/{tier} appends client_reference_id
+    "STRIPE_PAYMENT_LINKS": "{\"solo\":\"https://buy.stripe.com/3cI4gB0nU53Q8RN9dqaMU00\",\"pro\":\"https://buy.stripe.com/14A28t4Ea9k6d832P2aMU01\",\"team\":\"https://buy.stripe.com/4gMeVfc6Cbsec3ZgFSaMU02\",\"fleet\":\"https://buy.stripe.com/7sY5kFfiO7bY1pl75iaMU03\"}"
   }
   // Billing secrets (optional; worker runs unbilled without them):
   //   STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET

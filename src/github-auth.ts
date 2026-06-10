@@ -16,7 +16,7 @@
 
 import type { AuthRequest } from "@cloudflare/workers-oauth-provider";
 import { encodeState, decodeState } from "./state";
-import { handleStripeWebhook } from "./billing";
+import { handleStripeWebhook, paymentLinkFor } from "./billing";
 import type { Env } from "./types";
 
 const GH = "https://api.github.com";
@@ -78,6 +78,22 @@ export const GitHubAuthHandler = {
 
     if (url.pathname === "/healthz") return new Response("ok", { status: 200 });
 
+    // ---- Buy flow entry: identify the buyer, then hand off to Stripe ----
+    // /buy/{tier} runs the same GitHub login as connecting, then redirects to
+    // the tier's payment link with client_reference_id={login} so the webhook
+    // can bind the purchase to an account automatically.
+    if (url.pathname.startsWith("/buy/")) {
+      const tier = url.pathname.slice("/buy/".length).toLowerCase();
+      if (!paymentLinkFor(env, tier)) {
+        return html(`<h2>Unknown tier.</h2><p>See <a href="/#pricing">pricing</a>.</p>`, 404);
+      }
+      const gh = new URL("https://github.com/login/oauth/authorize");
+      gh.searchParams.set("client_id", env.GITHUB_CLIENT_ID);
+      gh.searchParams.set("redirect_uri", `${url.origin}/callback`);
+      gh.searchParams.set("state", encodeState({ kind: "buy", tier }));
+      return Response.redirect(gh.toString(), 302);
+    }
+
     // ---- Stripe billing webhook (signature-verified, idempotent) ----
     if (url.pathname === "/webhooks/stripe" && request.method === "POST") {
       return handleStripeWebhook(request, env);
@@ -109,7 +125,9 @@ export const GitHubAuthHandler = {
       const code = url.searchParams.get("code");
       const state = url.searchParams.get("state");
       if (!code || !state) return html(`<h2>Missing code or state.</h2>`, 400);
-      const oauthReqInfo = decodeState<AuthRequest>(state);
+      const decoded = decodeState<Record<string, unknown>>(state);
+      const buyTier = decoded?.kind === "buy" ? String(decoded.tier ?? "") : null;
+      const oauthReqInfo = decoded as unknown as AuthRequest;
 
       // Exchange for a transient user token (used twice, then discarded).
       const tokenRes = await fetch("https://github.com/login/oauth/access_token", {
@@ -129,6 +147,16 @@ export const GitHubAuthHandler = {
       const userToken = tokenJson.access_token;
 
       const user = await ghJson<{ login: string }>(`${GH}/user`, userToken);
+
+      // Buy flow: identity established — hand off to Stripe, bound to the login.
+      if (buyTier !== null) {
+        const link = paymentLinkFor(env, buyTier);
+        if (!link) return html(`<h2>Unknown tier.</h2><p>See <a href="/#pricing">pricing</a>.</p>`, 404);
+        const dest = new URL(link);
+        dest.searchParams.set("client_reference_id", user.login);
+        return Response.redirect(dest.toString(), 302);
+      }
+
       const inst = await ghJson<{ total_count: number; installations: Installation[] }>(
         `${GH}/user/installations?per_page=100`,
         userToken
