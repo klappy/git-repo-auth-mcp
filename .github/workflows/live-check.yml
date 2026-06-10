@@ -1,0 +1,59 @@
+# Weekly live check vs production — pattern borrowed from
+# aquifer-mcp/.github/workflows/coverage-live.yml.
+#
+# PR-time smoke proves the branch preview; this proves prod is still
+# healthy between merges (secret rotation, KV drift, upstream GitHub
+# changes). On failure it opens a deduplicated issue.
+
+name: Live Check
+
+on:
+  schedule:
+    - cron: "0 8 * * 1" # Mondays 08:00 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  smoke-prod:
+    name: Smoke vs prod
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - run: npm ci
+
+      - name: Run smoke battery against prod
+        id: smoke
+        continue-on-error: true
+        env:
+          SMOKE_BASE_URL: https://gitauth.klappy.dev
+        run: npm run test:smoke
+
+      - name: Open issue on failure (no duplicates)
+        if: steps.smoke.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TITLE="Live check failed: prod smoke battery"
+          EXISTING=$(gh issue list --repo "$GITHUB_REPOSITORY" \
+            --state open --search "\"$TITLE\" in:title" --json number --jq 'length')
+          if [ "$EXISTING" = "0" ]; then
+            gh issue create --repo "$GITHUB_REPOSITORY" \
+              --title "$TITLE" \
+              --body "The weekly smoke battery against https://gitauth.klappy.dev failed. See the run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          else
+            echo "Open issue already exists; not duplicating."
+          fi
+
+      - name: Fail the job if smoke failed
+        if: steps.smoke.outcome == 'failure'
+        run: exit 1
