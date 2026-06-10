@@ -140,6 +140,22 @@ h2{font-family:var(--disp);font-variation-settings:'wdth' 76;font-weight:800;fon
 .kill{margin-top:26px;font-family:var(--mono);font-size:13px;color:#8FA097;display:flex;gap:10px;align-items:baseline}
 .kill b{color:var(--amber)}
 
+/* ---------- uses: ship from chat ---------- */
+.uses{border-bottom:1.5px solid var(--ink);background:var(--paper-deep)}
+.uses .wrap{padding-top:64px;padding-bottom:72px}
+.uses-grid{margin-top:38px;display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+.use{border:1.5px solid var(--ink);padding:24px 22px;background:#fff}
+.use h3{font-family:var(--mono);font-size:13.5px;font-weight:600;letter-spacing:.06em;color:var(--viridian);margin-bottom:12px;text-transform:uppercase}
+.use p{font-size:14.5px;color:var(--ink-soft);line-height:1.65}
+.use p b{color:var(--ink)}
+
+/* ---------- pricing ---------- */
+.pricing{border-bottom:1.5px solid var(--ink)}
+.pricing .wrap{padding-top:64px;padding-bottom:72px}
+.price{font-family:var(--mono);font-size:42px;font-weight:600;margin-bottom:16px;letter-spacing:-.02em}
+.price span{font-size:14px;color:var(--ink-soft);font-weight:400;letter-spacing:0}
+.col .btn{margin-top:20px}
+
 /* ---------- setup ---------- */
 .setup{border-bottom:1.5px solid var(--ink)}
 .setup .wrap{padding-top:64px;padding-bottom:72px;display:grid;grid-template-columns:.9fr 1.1fr;gap:48px;align-items:start}
@@ -164,7 +180,7 @@ footer a{color:var(--viridian)}
 
 @media (max-width:900px){
   .hero .wrap{grid-template-columns:1fr;padding-top:48px;padding-bottom:96px}
-  .compare,.steps,.truths{grid-template-columns:1fr}
+  .compare,.steps,.truths,.uses-grid{grid-template-columns:1fr}
   .col+.col{border-left:none;border-top:1.5px solid var(--ink)}
   .step+.step{border-left:none;border-top:1.5px solid var(--ink)}
   .step .arrow{display:none}
@@ -181,6 +197,7 @@ footer a{color:var(--viridian)}
     <nav>
       <a href="#how">How it works</a>
       <a href="#honest">Security model</a>
+      <a href="#pricing">Pricing</a>
       <a href="#setup">Setup</a>
       <a class="btn btn-sm" href="https://github.com/klappy/git-repo-auth-mcp" target="_blank" rel="noopener">GitHub ↗</a>
     </nav>
@@ -288,6 +305,27 @@ footer a{color:var(--viridian)}
   </div>
 </section>
 
+<section class="uses" id="uses">
+  <div class="wrap">
+    <p class="sec-label">No coding tool required</p>
+    <h2>Ship from the chat you're already in.</h2>
+    <div class="uses-grid">
+      <div class="use">
+        <h3>Don't leave the thread</h3>
+        <p>Claude, ChatGPT, any frontier model &mdash; the plain conversation, even from a phone. Append to a repo, cut a branch, open a pull request, <b>mid-conversation</b>. No tool switch, no lost context.</p>
+      </div>
+      <div class="use">
+        <h3>Your flow, not ours</h3>
+        <p>Write straight to main if that's how you roll. Or run strict protected branches with required CI, and let the assistant bridge you into that setup. <b>We don't determine your flow. We let you.</b></p>
+      </div>
+      <div class="use">
+        <h3>Tested, not theorized</h3>
+        <p>Blank repository to branch protection and a working CI pipeline, set up entirely inside a chat &mdash; with Opus, and again with ChatGPT. <b>Not their coding tools. The chat.</b> It works.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
 <section class="honest" id="honest">
   <div class="wrap">
     <p class="sec-label">Read this before you trust it</p>
@@ -308,6 +346,36 @@ footer a{color:var(--viridian)}
       </div>
     </div>
     <p class="kill"><b>$</b> Reversal is two clicks. The riskiest credential in this system is the one it replaces.</p>
+  </div>
+</section>
+
+<section class="pricing" id="pricing">
+  <div class="wrap">
+    <p class="sec-label">The deal, stated plainly</p>
+    <h2>Host your own for free. Or use ours for a dollar a month.</h2>
+    <div class="compare">
+      <div class="col good">
+        <h3>Self-host <span class="tag">Your keys</span></h3>
+        <p class="price">$0 <span>forever</span></p>
+        <ul>
+          <li><span class="mk">&#10003;</span>Same code, your GitHub App, your worker. Nothing of yours touches anyone else's infrastructure.</li>
+          <li><span class="mk">&#10003;</span>Zero shared trust &mdash; the bearer token, the private key, and the blast radius are all yours.</li>
+          <li><span class="mk">&#10003;</span>The setup script below is the entire runbook.</li>
+        </ul>
+        <a class="btn" href="#setup">Run your own</a>
+      </div>
+      <div class="col good">
+        <h3>Hosted <span class="tag">$1 / month</span></h3>
+        <p class="price">$24 <span>for two years</span></p>
+        <ul>
+          <li><span class="mk">&#10003;</span>Connect in a minute. We run the worker; you keep the kill switch.</li>
+          <li><span class="mk">&#10003;</span>Same boundary as self-host: your repos, your app installation, two-click reversal.</li>
+          <li><span class="mk">&#10003;</span>You can do it yourself. At this price, why would you?</li>
+        </ul>
+        <a class="btn btn-primary" href="#setup">Connect your agent</a>
+      </div>
+    </div>
+    <p class="kill"><b>$</b> Audit the codebase &mdash; or ask your agents to. That's why it's open.</p>
   </div>
 </section>
 
