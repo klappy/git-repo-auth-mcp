@@ -1,0 +1,10 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "git-repo-auth-mcp",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-06-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true }
+  // Secrets (set via `wrangler secret put`, never committed, never in chat):
+  //   GH_APP_ID, GH_APP_INSTALLATION_ID, GH_APP_PRIVATE_KEY (PKCS#8), MCP_AUTH_TOKEN
+}
