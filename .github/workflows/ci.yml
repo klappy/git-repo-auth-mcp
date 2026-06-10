@@ -1,0 +1,107 @@
+# CI — the enforcer for the test battery.
+#
+# Pattern borrowed from transcode-mcp/.github/workflows/ci.yml (6B: Borrow,
+# adapted for the OAuth surface) per
+# klappy://canon/constraints/release-validation-gate — convention is
+# optional; convention plus an enforcer is binding.
+#
+#   check           typecheck + unit tests (no network)
+#   resolve-preview compute the auto-deployed branch preview URL, poll until live
+#   smoke           run test/smoke.live.test.ts against the preview
+#
+# Cloudflare Git integration auto-deploys every branch to
+#   https://<slug>-git-repo-auth-mcp.klappy.workers.dev
+# where <slug> is the branch lowercased with '/' and '.' replaced by '-'.
+# On push to main the slug is 'main'.
+#
+# Token minting is deliberately NOT smoked here — see the header comment
+# in test/smoke.live.test.ts.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Typecheck & Unit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm test
+
+  resolve-preview:
+    name: Resolve preview URL
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: check
+    outputs:
+      base_url: ${{ steps.url.outputs.base_url }}
+    steps:
+      - name: Compute branch slug + URL
+        id: url
+        run: |
+          REF="${{ github.head_ref || github.ref_name }}"
+          SLUG=$(echo "$REF" | tr '[:upper:]' '[:lower:]' | tr '/.' '--')
+          BASE_URL="https://${SLUG}-git-repo-auth-mcp.klappy.workers.dev"
+          echo "base_url=${BASE_URL}" >> "$GITHUB_OUTPUT"
+          echo "Branch: ${REF}"
+          echo "Preview: ${BASE_URL}"
+
+      # Cloudflare's auto-deploy runs in parallel with this workflow; wait
+      # (up to ~5 min) for /healthz to return 200 before smoking.
+      - name: Wait for preview deploy to be reachable
+        run: |
+          URL="${{ steps.url.outputs.base_url }}/healthz"
+          echo "Polling ${URL}"
+          for i in $(seq 1 60); do
+            CODE=$(curl -s -o /dev/null -w "%{http_code}" "$URL" || echo "000")
+            if [ "$CODE" = "200" ]; then
+              echo "Preview is live (HTTP 200) after ${i} attempt(s)."
+              exit 0
+            fi
+            echo "  attempt ${i}: HTTP ${CODE} — waiting 5s"
+            sleep 5
+          done
+          echo "Preview did not become reachable in time."
+          exit 1
+
+  smoke:
+    name: Smoke vs preview
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: resolve-preview
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - run: npm ci
+
+      - name: Run smoke battery against preview
+        env:
+          SMOKE_BASE_URL: ${{ needs.resolve-preview.outputs.base_url }}
+        run: npm run test:smoke
