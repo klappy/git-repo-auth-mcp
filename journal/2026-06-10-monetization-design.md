@@ -44,6 +44,6 @@ Captain connected the Stripe MCP; objects created directly in live mode (Covenyn
 
 Remaining, operator-side (dashboard, keeps secrets out of chat): Billing Meter `git_token_mint` (connector lacks the endpoint; analytics-only since tiers are flat), webhook endpoint -> https://gitauth.klappy.dev/webhooks/stripe (events: checkout.session.completed, customer.subscription.updated, customer.subscription.deleted) then `wrangler secret put STRIPE_WEBHOOK_SECRET` and `STRIPE_SECRET_KEY`. Then deploy.
 
-## [O-open] Binding gap on homepage purchases
+## [O-open → CLOSED same day] Binding gap on homepage purchases
 
-Payment links from the homepage carry no client_reference_id, so the webhook cannot bind those purchases to a GitHub login automatically (in-product quota-wall upgrades do carry it). Next build item: a worker /buy/{tier} route that runs the existing GitHub login dance and redirects to the payment link with client_reference_id=login. Until then, homepage purchases reconcile manually by receipt email.
+Closed by the /buy/{tier} route: buy buttons hit the worker, which runs the existing GitHub login dance (tagged state, same /callback, user token used once and discarded) and redirects to the tier's payment link with client_reference_id={login}. Every purchase path now binds automatically; quota.ts no longer mangles the upgrade URL with a query-on-fragment. Payment links live in STRIPE_PAYMENT_LINKS (tier → URL), validated https-only.

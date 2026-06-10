@@ -161,9 +161,8 @@ export async function checkAndRecordMint(
   const policy = await loadPolicy(env);
   const tier = await getTier(env, login);
   const enforce = env.QUOTA_ENFORCE === "true";
-  const upgrade_url = env.STRIPE_UPGRADE_URL
-    ? `${env.STRIPE_UPGRADE_URL}${env.STRIPE_UPGRADE_URL.includes("?") ? "&" : "?"}client_reference_id=${encodeURIComponent(login)}`
-    : undefined;
+  // Binding to a login happens in the /buy flow; the wall just points at pricing.
+  const upgrade_url = env.STRIPE_UPGRADE_URL;
 
   // Same-scope re-request while a token is alive: free, by doc promise.
   const live = await env.OAUTH_KV.get(`quota:tok:${login}:${scope}`);
