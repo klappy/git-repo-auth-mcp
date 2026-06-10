@@ -41,3 +41,7 @@ Minting costs ~nothing; customer API traffic rides their own installation's GitH
 ## [O] Persona check
 
 First-time vibe coder lives entirely inside the 50-mint bucket, never sees a window. A scaled operator running up to ~50 concurrent agents fits inside Max 20x's 100-token window without reset-cycle gymnastics. The ladder covers both ends.
+
+## [L] Hero-number rule: the big figure is always the per-month price
+
+Learned from customer zero (2026-06-10): the legacy homepage showed a large "$24" with "for two years" in fine print, and he read it as $24/month — missing that the real deal was $1/month. People parse the biggest number on a pricing card as the monthly price regardless of qualifiers. Standing rule for every pricing surface (homepage, checkout, docs): the hero number is the per-month figure; billing periods, totals, and unit counts are fine print. When tier prices land, cards read "$X / month" big, with any annual total small ("billed annually, $Y/yr"). Counts of things that are not prices (mints, tokens) never take the hero slot.

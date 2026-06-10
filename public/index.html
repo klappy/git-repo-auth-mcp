@@ -356,7 +356,7 @@ footer a{color:var(--viridian)}
     <div class="compare">
       <div class="col good">
         <h3>Self-host <span class="tag">Your keys</span></h3>
-        <p class="price">$0 <span>forever</span></p>
+        <p class="price">$0 <span>/ month, forever &mdash; your infrastructure</span></p>
         <ul>
           <li><span class="mk">&#10003;</span>Same code, your GitHub App, your worker. Nothing of yours touches anyone else's infrastructure.</li>
           <li><span class="mk">&#10003;</span>Zero shared trust &mdash; the private key and the blast radius are yours alone.</li>
@@ -366,7 +366,11 @@ footer a{color:var(--viridian)}
       </div>
       <div class="col good">
         <h3>Hosted free <span class="tag">No card</span></h3>
-        <p class="price">50 <span>mints, one-time bucket</span></p>
+        <!-- Hero-number rule (governance/internal/pricing-decisions.md): the big
+             figure is ALWAYS the per-month price. Periods, totals, and units are
+             fine print. Learned from customer zero misreading a big "$24 / two
+             years" as $24 per month. When paid prices land: "$X <span>/ month</span>". -->
+        <p class="price">$0 <span>/ month &mdash; one-time trial bucket of 50 mints</span></p>
         <ul>
           <li><span class="mk">&#10003;</span>Connect in a minute and genuinely feel it &mdash; burn all 50 in an hour or spread them over a month.</li>
           <li><span class="mk">&#10003;</span>No decay, no daily trickle. When the bucket is empty, you decide: upgrade or walk.</li>

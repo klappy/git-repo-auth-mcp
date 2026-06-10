@@ -33,3 +33,7 @@ Captain's call: don't wait on shared klappy.dev billing rails; ship metering sel
 - Evidence: `tsc --noEmit` clean; 9/9 vitest (bundled-doc parse asserts 50/5-60/25-300/100-1200 so doc drift fails CI; scopeKey order-insensitivity; webhook signature accept/reject/expiry); `wrangler deploy --dry-run` bundles with the Text rule.
 
 Not done here, deliberately: Stripe products/prices (blocked on captain pricing), webhook endpoint registration in the Stripe dashboard, production deploy. Release follows klappy://canon/constraints/release-validation-gate — validation needs a fresh context, not this session's smoke.
+
+## Addendum — customer zero feedback, same day
+
+First prospective customer misread the legacy live page: big "$24 / two years" parsed as $24/month (the actual $1/mo fine print went unseen — happily, he wanted it anyway). Encoded as the hero-number rule in pricing-decisions.md: the big figure on any pricing surface is always the per-month price; everything else is fine print. Branch homepage updated to comply ($0/month heroes; the 50-mint bucket demoted from hero slot to fine print). The misread page stays live until PR #3 merges.
