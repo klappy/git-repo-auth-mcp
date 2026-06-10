@@ -16,7 +16,11 @@
     // Public slug of your GitHub App (from its URL: github.com/apps/<slug>)
     "GH_APP_SLUG": "git-repo-auth",
     // Metering ships observe-only; flip to "true" to enforce quotas.
-    "QUOTA_ENFORCE": "false"
+    "QUOTA_ENFORCE": "false",
+    // Stripe price id -> tier id (live mode, Covenynt Ventures LLC)
+    "STRIPE_PRICE_MAP": "{\"price_1TgrOHPHZ1kOt0d4ROZOt0rZ\":\"solo\",\"price_1TgrONPHZ1kOt0d4XvuAPXsh\":\"pro\",\"price_1TgrOUPHZ1kOt0d4ki14AGCo\":\"team\",\"price_1TgrOcPHZ1kOt0d4CtxsK6QA\":\"fleet\"}",
+    // Where the quota wall sends people (login appended as client_reference_id)
+    "STRIPE_UPGRADE_URL": "https://gitauth.klappy.dev/#pricing"
   }
   // Billing secrets (optional; worker runs unbilled without them):
   //   STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET
