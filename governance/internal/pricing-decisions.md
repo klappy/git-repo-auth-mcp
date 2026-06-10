@@ -49,3 +49,7 @@ Learned from customer zero (2026-06-10): the legacy homepage showed a large "$24
 ## [D] Launch prices: linear with concurrency — Pro $5/mo, Max 5x $25/mo, Max 20x $100/mo
 
 The tier names state the multiplier, so the prices honor it: 5x the window quota costs 5x the dollars, 20x costs 20x. Self-explaining, impossible to feel tricked by, and consistent with the public framing that limits are concurrency slots, not cost recovery. Evidence for the ceiling: customer zero wanted the product while believing it cost $24/month — Max 5x at $25 sits exactly on the demonstrated willingness-to-pay, with Pro at $5 as the easy yes. Prices live in governance/external/tiers.md (Price column); homepage and docs tool render from it, so a repricing is a one-line doc edit. Ratified by captain review of this PR.
+
+## [D] Amendment (captain): Solo replaces Pro — the legacy $1/mo deal is the entry paid tier
+
+Solo: $1/month, billed $24 per two years, with the 5-tokens-per-5-hour-window quota (and the 60/week backstop). It is the deal customer zero responded to, restored deliberately: an irresistible entry price that makes the paid decision trivial, while Max 5x ($25) and Max 20x ($100) carry the revenue and keep their honest names — 5x and 20x Solo's concurrency. Pricing is no longer price-linear and that's accepted; Solo is the hook, not the margin. Five per window means five whenever you like: all in the first hour, or one an hour for five hours.

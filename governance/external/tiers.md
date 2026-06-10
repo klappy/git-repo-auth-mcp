@@ -11,11 +11,11 @@ Concurrency. A minted token lives at most one hour, so "tokens minted per window
 | Tier | Tokens per rolling 5-hour window | Weekly backstop | Price |
 |---|---|---|---|
 | Free | one-time bucket of **50 mints total** | — | $0 |
-| Pro | **5** | 60 | $5/mo |
+| Solo | **5** | 60 | $1/mo ($24 per 2 years) |
 | Max 5x | **25** | 300 | $25/mo |
 | Max 20x | **100** | 1,200 | $100/mo |
 
-Pricing is linear with concurrency: five times the agents costs five times the dollars. No bundling tricks, no "contact sales."
+Solo is the deal that started this: a dollar a month, billed $24 for two years. The Max tier names multiply Solo's concurrency — 5x and 20x the tokens per window. No bundling tricks, no "contact sales."
 
 ## How the free bucket works
 

@@ -54,12 +54,12 @@ export async function verifyStripeSignature(
   return timingSafeEqual(hex, v1);
 }
 
-type TierId = "pro" | "max_5x" | "max_20x";
+type TierId = "solo" | "max_5x" | "max_20x";
 
 function tierFromEvent(obj: Record<string, unknown>, env: Env): TierId | undefined {
   const meta = obj["metadata"] as Record<string, string> | undefined;
   const fromMeta = meta?.tier;
-  if (fromMeta === "pro" || fromMeta === "max_5x" || fromMeta === "max_20x") return fromMeta;
+  if (fromMeta === "solo" || fromMeta === "max_5x" || fromMeta === "max_20x") return fromMeta;
   if (!env.STRIPE_PRICE_MAP) return undefined;
   try {
     const map = JSON.parse(env.STRIPE_PRICE_MAP) as Record<string, TierId>;
@@ -92,7 +92,7 @@ export async function handleStripeWebhook(request: Request, env: Env): Promise<R
   if (event.type === "checkout.session.completed") {
     const login = obj["client_reference_id"] as string | null;
     const customer = obj["customer"] as string | null;
-    const tier = tierFromEvent(obj, env) ?? "pro";
+    const tier = tierFromEvent(obj, env) ?? "solo";
     if (login) {
       await env.OAUTH_KV.put(`quota:tier:${login}`, tier);
       if (customer) {

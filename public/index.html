@@ -366,7 +366,7 @@ footer a{color:var(--viridian)}
 <section class="pricing" id="pricing">
   <div class="wrap">
     <p class="sec-label">The deal, stated plainly</p>
-    <h2>You're buying concurrency. The names do the math.</h2>
+    <h2>You're buying concurrency. Solo gets you in. The Max names do the math.</h2>
     <p style="margin-top:16px;font-size:16px;color:var(--ink-soft);max-width:62ch">Tokens live one hour, so tokens-per-window is how many agents can work your repos <b style="color:var(--ink)">at the same time</b>. Five times the agents costs five times the dollars &mdash; linear, no bundling tricks. Every response shows <span class="mono">remaining</span> and <span class="mono">window_reset_at</span>, so the wall is never a surprise.</p>
     <!-- Hero-number rule: the big figure is ALWAYS the per-month price.
          Source of truth: governance/external/tiers.md — script re-renders
@@ -383,13 +383,13 @@ footer a{color:var(--viridian)}
           <li><span class="mk">&#10003;</span><span>No decay &mdash; a clean wall, then you decide</span></li>
         </ul>
       </div>
-      <div class="tier hot" data-tier="Pro">
-        <h3>Pro</h3>
-        <p class="price" data-slot="price">$5</p>
-        <span class="per">per month</span>
+      <div class="tier hot" data-tier="Solo">
+        <h3>Solo</h3>
+        <p class="price" data-slot="price">$1</p>
+        <span class="per">per month &mdash; $24 billed every 2 years</span>
         <ul>
           <li><span class="mk">&#10003;</span><span><b data-slot="quota">5</b> tokens per 5-hour window</span></li>
-          <li><span class="mk">&#10003;</span><span>&asymp; <b>5 agents</b> working at once</span></li>
+          <li><span class="mk">&#10003;</span><span>All 5 in the first hour, or one an hour &mdash; your rhythm</span></li>
           <li><span class="mk">&#10003;</span><span>Weekly backstop <span data-slot="weekly">60</span> &mdash; normal use never feels it</span></li>
         </ul>
       </div>
@@ -556,7 +556,7 @@ openssl pkcs8 -topk8 -inform PEM \
     .then(function(r){ return r.ok ? r.text() : Promise.reject(); })
     .then(function(md){
       var bucket = md.match(/bucket of \*\*(\d+) mints? total\*\*/i);
-      var re = /^\|\s*(Pro|Max 5x|Max 20x)\s*\|\s*\*\*(\d+)\*\*\s*\|\s*([\d,]+)\s*\|\s*(\$[\d.]+)\/mo\s*\|/gim, m;
+      var re = /^\|\s*(Solo|Max 5x|Max 20x)\s*\|\s*\*\*(\d+)\*\*\s*\|\s*([\d,]+)\s*\|\s*(\$[\d.]+)\/mo[^|]*\|/gim, m;
       var rows = {};
       while ((m = re.exec(md))) rows[m[1]] = { quota: m[2], weekly: m[3], price: m[4] };
       if (bucket){
