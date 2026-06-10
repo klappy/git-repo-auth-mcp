@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- git-repo-auth-mcp · the minted seal: short-lived tokens, struck on demand.
+     Palette is the site's own: paper #FAFAF6, ink #16201B, viridian #0E5A4A, amber #D9A441. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Git Repo Auth MCP">
+  <!-- paper tile -->
+  <rect x="1" y="1" width="62" height="62" rx="13" fill="#FAFAF6"/>
+  <rect x="1.75" y="1.75" width="60.5" height="60.5" rx="12.4" fill="none" stroke="#16201B" stroke-width="1.5"/>
+  <!-- seal: bold ring + fine security ring -->
+  <circle cx="32" cy="32" r="23.5" fill="none" stroke="#0E5A4A" stroke-width="3"/>
+  <circle cx="32" cy="32" r="19.25" fill="none" stroke="#0E5A4A" stroke-width="0.9" opacity="0.55"/>
+  <!-- key -->
+  <circle cx="32" cy="21" r="7" fill="none" stroke="#16201B" stroke-width="4.5"/>
+  <rect x="29.25" y="27" width="5.5" height="23" rx="1.4" fill="#16201B"/>
+  <rect x="33" y="39" width="7.5" height="4.5" rx="1" fill="#16201B"/>
+  <rect x="33" y="45.5" width="9.5" height="4.5" rx="1" fill="#16201B"/>
+  <!-- amber strike in the bow -->
+  <circle cx="32" cy="21" r="3.4" fill="#D9A441"/>
+</svg>
