@@ -1,6 +1,6 @@
 # Operator Observability — User & Conversion Stats
 
-*Draft for operator review. Not yet ratified. Lives at `governance/internal/operator-observability.md` once approved; served live by the worker like all governance.*
+*Operator-approved 2026-06-11. Served live by the worker like all governance.*
 
 ## Why this exists
 
