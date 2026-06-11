@@ -149,10 +149,13 @@ export async function getTier(env: Env, login: string): Promise<TierId> {
 }
 
 /**
- * The whole gate. Decides cached-vs-counted, enforces (when QUOTA_ENFORCE
- * is "true" — otherwise observes and always allows), and records.
+ * The decision half of the gate. Decides cached-vs-counted and enforces
+ * (when QUOTA_ENFORCE is "true" — otherwise observes and always allows),
+ * but records NOTHING. Charging happens in commitMint, called only after
+ * GitHub actually delivered a token — failed mints are free, by doc
+ * promise (tiers.md). `remaining` is reported as the post-commit value.
  */
-export async function checkAndRecordMint(
+export async function checkMint(
   env: Env,
   login: string,
   scope: string,
@@ -178,8 +181,6 @@ export async function checkAndRecordMint(
       return { ok: false, tier, limit_hit: "bucket_empty", upgrade_url, governance_source: policy.source };
     }
     const next = Math.max(0, remaining - 1);
-    await env.OAUTH_KV.put(`quota:bucket:${login}`, String(next));
-    await recordMint(env, login, now);
     return { ok: true, cached: false, tier, remaining: next, governance_source: policy.source };
   }
 
@@ -206,7 +207,6 @@ export async function checkAndRecordMint(
       governance_source: policy.source,
     };
   }
-  await recordMint(env, login, now);
   return {
     ok: true,
     cached: false,
@@ -216,6 +216,22 @@ export async function checkAndRecordMint(
     weekly_remaining: Math.max(0, limits.weekly - mints.length - 1),
     governance_source: policy.source,
   };
+}
+
+/**
+ * The charging half of the gate. Call only after GitHub actually delivered
+ * a token. Failed mints (dead installation, permission mismatch, outage)
+ * never reach this and therefore never spend quota.
+ */
+export async function commitMint(env: Env, login: string, now = Date.now()): Promise<void> {
+  const tier = await getTier(env, login);
+  if (tier === "free") {
+    const policy = await loadPolicy(env);
+    const raw = await env.OAUTH_KV.get(`quota:bucket:${login}`);
+    const remaining = raw === null ? policy.freeBucket : Number(raw);
+    await env.OAUTH_KV.put(`quota:bucket:${login}`, String(Math.max(0, remaining - 1)));
+  }
+  await recordMint(env, login, now);
 }
 
 async function usageSnapshot(

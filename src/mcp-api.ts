@@ -4,12 +4,14 @@
  * bound to props.installationId — GitHub enforces that the resulting token
  * cannot reach any other installation's repositories.
  *
- * Metering wraps the mint (see src/quota.ts): same-scope re-requests within
- * a live token's lifetime are cache hits and cost nothing; counted mints are
- * accounted in KV and (when billing is configured) emitted to a Stripe
- * Billing Meter. Tier numbers come from governance/external/tiers.md at
- * runtime — never from this code. Enforcement is feature-flagged
- * (QUOTA_ENFORCE) so accounting can ship and be observed first.
+ * Metering brackets the mint (see src/quota.ts): checkMint decides before
+ * the GitHub call, commitMint charges only after GitHub delivers — failed
+ * mints are free. Same-scope re-requests within a live token's lifetime are
+ * cache hits and cost nothing; counted mints are accounted in KV and (when
+ * billing is configured) emitted to a Stripe Billing Meter. Tier numbers
+ * come from governance/external/tiers.md at runtime — never from this code.
+ * Enforcement is feature-flagged (QUOTA_ENFORCE) so accounting can ship and
+ * be observed first.
  */
 
 import { createMcpHandler } from "agents/mcp";
@@ -17,7 +19,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { createAppAuth, type InstallationAccessTokenAuthentication } from "@octokit/auth-app";
 import { normalizePrivateKey } from "./keys";
-import { checkAndRecordMint, recordLiveToken, scopeKey } from "./quota";
+import { checkMint, commitMint, recordLiveToken, scopeKey } from "./quota";
 import { emitMeterEvent } from "./billing";
 import { getDocs, listDocs } from "./docs";
 import { computeStats, isOperator } from "./stats";
@@ -85,7 +87,7 @@ function buildServer(env: Env, props: GrantProps, ctx: ExecutionContext): McpSer
       const effectivePermissions =
         permissions && Object.keys(permissions).length > 0 ? permissions : { contents: "read" };
       const scope = await scopeKey(props.installationId, repositories, effectivePermissions);
-      const decision = await checkAndRecordMint(env, props.login, scope);
+      const decision = await checkMint(env, props.login, scope);
 
       if (!decision.ok) {
         const wall = {
@@ -144,6 +146,7 @@ function buildServer(env: Env, props: GrantProps, ctx: ExecutionContext): McpSer
       }
 
       if (!decision.cached) {
+        ctx.waitUntil(commitMint(env, props.login));
         ctx.waitUntil(recordLiveToken(env, props.login, scope, result.expiresAt));
         ctx.waitUntil(emitMeterEvent(env, props.login));
       }
