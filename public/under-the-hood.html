@@ -394,7 +394,7 @@ footer a{color:var(--viridian)}
   <div class="wrap">
     <p class="sec-label">The deal, stated plainly</p>
     <h2>How big is your agentic concurrency?</h2>
-    <p style="margin-top:16px;font-size:16px;color:var(--ink-soft);max-width:62ch">Tokens live one hour, so tokens-per-window is how many agents can work your repos <b style="color:var(--ink)">at the same time</b>. Every tier is one human, no seats &mdash; <b style="color:var(--ink)">the team is your agents</b>, and the per-agent price falls as you climb. Every response shows <span class="mono">remaining</span> and <span class="mono">window_reset_at</span>, so the wall is never a surprise.</p>
+    <p style="margin-top:16px;font-size:16px;color:var(--ink-soft);max-width:62ch">Tokens live one hour, and a working agent typically mints two &mdash; a read-only token to look (the secure default), then a write token to act &mdash; so every tier budgets <b style="color:var(--ink)">two tokens per agent</b> and the cards below count agents. The mix is unpoliced: two reads, two writes, a read and a write, all the same. Every tier is one human, no seats &mdash; <b style="color:var(--ink)">the team is your agents</b>, and the per-agent price falls as you climb. Every response shows <span class="mono">remaining</span> and <span class="mono">window_reset_at</span>, so the wall is never a surprise.</p>
     <!-- Hero-number rule: the big figure is ALWAYS the per-month price.
          Source of truth: governance/external/tiers.md — script re-renders
          quotas AND prices from a live fetch of that doc; these cards are the
@@ -454,7 +454,7 @@ footer a{color:var(--viridian)}
         <a class="btn btn-primary btn-sm" style="margin-top:16px" href="/buy/fleet" >Get Fleet</a>
       </div>
     </div>
-    <p class="kill" style="margin-top:22px"><b>$</b> Re-requesting the same scope while a token is live is always free. Prices and quotas render from <a href="https://github.com/klappy/git-repo-auth-mcp/blob/main/governance/external/tiers.md" target="_blank" rel="noopener">the governance document the server enforces</a>. Prefer your own keys? <a href="#setup">Self-host for $0, forever</a> &mdash; same code.</p>
+    <p class="kill" style="margin-top:22px"><b>$</b> Re-requesting the same scope while a token is live is always free, and a mint GitHub refuses never charges &mdash; you pay only for tokens you receive. Prices and quotas render from <a href="https://github.com/klappy/git-repo-auth-mcp/blob/main/governance/external/tiers.md" target="_blank" rel="noopener">the governance document the server enforces</a>. Prefer your own keys? <a href="#setup">Self-host for $0, forever</a> &mdash; same code.</p>
   </div>
 </section>
 
@@ -599,6 +599,10 @@ openssl pkcs8 -topk8 -inform PEM \
       var re = /^\|\s*(Solo|Pro|Team|Fleet)\s*\|\s*\*\*([\d,]+)\*\*\s*\|\s*([\d,]+)\s*\|\s*(\$[\d.]+)\/mo[^|]*\|/gim, m;
       var rows = {};
       while ((m = re.exec(md))) rows[m[1]] = { quota: m[2], weekly: m[3], price: m[4] };
+      // Two-tokens-per-agent: when the doc declares the pair, the agent
+      // count is half the token column. Older docs without the marker are
+      // 1:1. The doc stays the source of truth either way.
+      var perAgent = /two per agent/i.test(md) ? 2 : 1;
       if (bucket){
         var fq = document.querySelector('[data-tier="Free"] [data-slot="quota"]');
         if (fq) fq.textContent = bucket[1] + ' mints';
@@ -610,7 +614,7 @@ openssl pkcs8 -topk8 -inform PEM \
         var q = card.querySelector('[data-slot="quota"]');
         var w = card.querySelector('[data-slot="weekly"]');
         if (p) p.textContent = rows[name].price;
-        if (q) q.textContent = rows[name].quota;
+        if (q) q.textContent = (Number(rows[name].quota.replace(/,/g, '')) / perAgent).toLocaleString('en-US');
         if (w) w.textContent = rows[name].weekly;
       });
     })
