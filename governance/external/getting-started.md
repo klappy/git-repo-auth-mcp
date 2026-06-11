@@ -15,6 +15,20 @@ Your agent's first token is read-only by design: calling `github_token` with no 
 
 If your workflow writes as much as it reads, tell your agent once — "when working in my repos, request contents and pull_requests write" — and it will mint accordingly. Caution is the default, not a ceiling; you set your own.
 
+## Pull requests in your name: the one-click handoff
+
+Commits and PRs your agent creates with minted tokens are attributed to the App's bot identity — honest and auditable, but some tooling keys on PR authorship (review bots on individual plans, your own "created by me" filters), and sometimes you simply want the PR to be yours.
+
+The smooth pattern: **let the agent push the branch, and you open the PR with one click.** After pushing, GitHub exposes a ready-made creation link for any branch:
+
+```
+https://github.com/<owner>/<repo>/pull/new/<branch>
+```
+
+(or a compare link, `https://github.com/<owner>/<repo>/compare/<base>...<branch>`, if you want to pick the base). A PR opened from that link is authored by *you* — author-matched tooling triggers, your filters see it, and the branch's commit history still carries the agent's work transparently.
+
+Tell your agent once: *"after pushing a branch, give me the pull-request creation link instead of opening the PR yourself."* From then on every handoff is a single click. Agents can still open PRs directly when bot authorship is fine for your workflow — both paths are legitimate; this tip just makes the personal one effortless.
+
 ## What to try with your 50 mints
 
 - Point it at an old project and ask for a code review PR.
