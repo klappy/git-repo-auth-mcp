@@ -8,6 +8,7 @@
 
 ### Added
 
+- **`/.well-known/provenance`** — build-asserted deployment provenance (issue #8, phase 1). Returns the commit SHA captured at build time by `scripts/build-info.mjs` (`WORKERS_CI_COMMIT_SHA` → `GITHUB_SHA` → local git → `"unknown"`), with the payload itself stating its limit: chain of custody, not cryptographic proof. Phases 2–3 (reproducible builds, Sigstore cross-checks) tracked in issue #8.
 - Tool annotations on `github_token` and `docs` (title, `readOnlyHint`/`destructiveHint` et al.) per Connectors Directory requirements.
 - Origin-header validation at the worker edge (`src/origin.ts`): requests bearing an `Origin` must match the deployment host or `ALLOWED_ORIGINS` (new optional env var); absent `Origin` passes. Substrate evaluation in the file header.
 - Policy pages served from governance documents (live → bundled): `/privacy`, `/terms`, `/security` (`src/pages.ts`).

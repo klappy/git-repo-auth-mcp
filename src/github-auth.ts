@@ -15,6 +15,7 @@
  */
 
 import { handlePage } from "./pages";
+import { provenanceResponse } from "./provenance";
 import type { AuthRequest } from "@cloudflare/workers-oauth-provider";
 import { encodeState, decodeState } from "./state";
 import { setupOutcome } from "./install";
@@ -103,6 +104,9 @@ export const GitHubAuthHandler = {
     const url = new URL(request.url);
 
     if (url.pathname === "/healthz") return new Response("ok", { status: 200 });
+
+    // ---- Deployment provenance: build-asserted commit identity (issue #8) ----
+    if (url.pathname === "/.well-known/provenance") return provenanceResponse();
 
     // ---- Policy pages: /privacy, /terms, /security (live -> bundled governance) ----
     const pageResponse = await handlePage(url.pathname, env);

@@ -24,6 +24,17 @@ describe.runIf(!!BASE)(`smoke vs ${BASE ?? "(unset)"}`, () => {
     expect(res.status).toBe(200);
   });
 
+  it("GET /.well-known/provenance returns the deployment's commit record", async () => {
+    const res = await fetch(url("/.well-known/provenance"));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { commit?: string; source?: string; claim?: string };
+    expect(typeof body.commit).toBe("string");
+    expect(String(body.claim)).toContain("build-asserted");
+    // Note: until the Workers Builds build command runs scripts/build-info.mjs,
+    // source will be "placeholder" and commit "unknown" — reachable, honest,
+    // not yet populated. We assert shape here, not population.
+  });
+
   it("GET / serves the homepage", async () => {
     const res = await fetch(url("/"));
     expect(res.status).toBe(200);
