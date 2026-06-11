@@ -15,7 +15,7 @@
 import { createMcpHandler } from "agents/mcp";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { createAppAuth } from "@octokit/auth-app";
+import { createAppAuth, type InstallationAccessTokenAuthentication } from "@octokit/auth-app";
 import { normalizePrivateKey } from "./keys";
 import { checkAndRecordMint, recordLiveToken, scopeKey } from "./quota";
 import { emitMeterEvent } from "./billing";
@@ -104,12 +104,44 @@ function buildServer(env: Env, props: GrantProps, ctx: ExecutionContext): McpSer
       }
 
       const auth = getAppAuth(env);
-      const result = await auth({
-        type: "installation",
-        installationId: props.installationId,
-        ...(repositories ? { repositoryNames: repositories } : {}),
-        permissions: effectivePermissions,
-      });
+      let result: InstallationAccessTokenAuthentication;
+      try {
+        result = (await auth({
+          type: "installation",
+          installationId: props.installationId,
+          ...(repositories ? { repositoryNames: repositories } : {}),
+          permissions: effectivePermissions,
+        })) as InstallationAccessTokenAuthentication;
+      } catch (err) {
+        // GitHub 404s token creation when the installation no longer exists —
+        // typically because the App was uninstalled (or uninstalled and
+        // reinstalled, which issues a NEW installation id; the old id frozen
+        // into this connection's grant is gone forever). Without this catch,
+        // Octokit's raw "Not Found - <docs url>" string reaches the user and
+        // explains nothing. Diagnose it for them and name the one real fix.
+        const status = (err as { status?: number } | null)?.status;
+        if (status === 404) {
+          const wall = {
+            error: "installation_gone",
+            detail:
+              `GitHub has no installation #${props.installationId} for this App anymore. ` +
+              `It was most likely uninstalled — or uninstalled and reinstalled, which creates a new ` +
+              `installation id. This connection's grant is permanently bound to the old one.`,
+            fix:
+              "Disconnect and reconnect this connector in your MCP client (Claude: Settings → Connectors → " +
+              "Git Repo Auth). That re-runs the GitHub flow and binds the connection to the current " +
+              "installation. Two things that will NOT fix it: the website's Connect GitHub button " +
+              "(it installs the App but cannot rebind an existing connection), and reconnecting while " +
+              "reusing an already-open conversation (it keeps the token it started with — use a fresh one).",
+            docs: 'Ask the docs tool about "getting started" for the full connection flow.',
+          };
+          return {
+            content: [{ type: "text" as const, text: JSON.stringify(wall, null, 2) }],
+            isError: true,
+          };
+        }
+        throw err;
+      }
 
       if (!decision.cached) {
         ctx.waitUntil(recordLiveToken(env, props.login, scope, result.expiresAt));
