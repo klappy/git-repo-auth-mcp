@@ -11,6 +11,7 @@ import bundledGettingStarted from "../governance/external/getting-started.md";
 import bundledPrivacy from "../governance/external/privacy-policy.md";
 import bundledTerms from "../governance/external/terms-of-service.md";
 import bundledStance from "../governance/external/prompt-injection-stance.md";
+import { rankByQuery } from "./match";
 import type { Env } from "./types";
 
 const DOCS: Record<string, { bundled: string; about: string }> = {
@@ -64,11 +65,9 @@ export async function getDocs(
   env: Env,
   query: string
 ): Promise<Array<{ name: string; source: "live" | "bundled"; text: string }>> {
-  const q = query.toLowerCase();
-  const names = Object.keys(DOCS).filter(
-    (name) => name.includes(q) || DOCS[name].about.includes(q) || q.includes(name.replace(".md", ""))
-  );
-  const chosen = (names.length > 0 ? names : Object.keys(DOCS)).slice(0, 2);
+  const catalog = Object.entries(DOCS).map(([name, d]) => ({ name, about: d.about }));
+  const ranked = rankByQuery(query, catalog).map((e) => e.name);
+  const chosen = (ranked.length > 0 ? ranked : Object.keys(DOCS)).slice(0, 2);
   const base =
     env.GOVERNANCE_RAW_BASE ??
     "https://raw.githubusercontent.com/klappy/git-repo-auth-mcp/main";
