@@ -1,6 +1,6 @@
 # Reviewer Test Account — Setup & Step-by-Step Instructions (v2)
 
-Design principle: **the reviewer walks the same path every new user walks.** No out-of-band setup beyond a test identity and sample content. The connect flow handles App installation itself (a zero-installation user is routed to install; reconnecting then binds the new installation automatically), and the free tier — 50 mints, no card — is the designed first-run experience, with ample headroom for a full review. The review thereby validates the real onboarding, not a pre-arranged state.
+Design principle: **the reviewer walks the same path every new user walks.** No out-of-band setup beyond a test identity and sample content. The connect flow handles App installation itself (a zero-installation user is sent into GitHub's install flow and, on completion, returns and binds automatically; if the ten-minute resume window lapses, reconnecting binds automatically instead), and the free tier — 50 mints, no card — is the designed first-run experience, with ample headroom for a full review. The review thereby validates the real onboarding, not a pre-arranged state.
 
 ---
 
@@ -9,7 +9,8 @@ Design principle: **the reviewer walks the same path every new user walks.** No 
 1. Create a dedicated GitHub account (e.g. `gitauth-review`). Record credentials for the form.
 2. As that account, create a scratch repository (e.g. `review-sandbox`) and **populate it**: a few source files, a second branch, one open PR. (Sample content is operator-side because "test account has no sample data" is a named rejection cause — but the App is NOT pre-installed; that's the reviewer's first step, in-band.)
 3. Dry-run the walkthrough below once yourself end to end, then uninstall the App again so the reviewer starts from zero installations. Separately, run every tool via MCP Inspector. The form asks you to confirm both.
-4. Recovery lever (document, don't pre-arm): if repeated review rounds ever exhaust the one-time free bucket, reset `quota:bucket:gitauth-review` in KV. A normal review uses a fraction of 50.
+4. One-time App configuration (required for the in-band return): GitHub App settings → **Setup URL** = `https://gitauth.klappy.dev/setup`. Without it, post-install users stay on GitHub and the reconnect fallback carries them — functional, but not the happy path the walkthrough describes.
+5. Recovery lever (document, don't pre-arm): if repeated review rounds ever exhaust the one-time free bucket, reset `quota:bucket:gitauth-review` in KV. A normal review uses a fraction of 50.
 
 ---
 
@@ -19,7 +20,7 @@ Design principle: **the reviewer walks the same path every new user walks.** No 
 
 ### 1. Connect — and install, in-band
 
-Add the connector with server URL `https://gitauth.klappy.dev/mcp`. Sign in with the provided GitHub test credentials. Because this account has no App installations yet, the flow shows a one-step install page: follow the link to GitHub, choose the test account, and select the `review-sandbox` repository. Then reconnect from your client — with the installation now in place, the flow binds it automatically and you land back connected. (This zero-installation routing is the product's designed onboarding, not a workaround.)
+Add the connector with server URL `https://gitauth.klappy.dev/mcp`. Sign in with the provided GitHub test credentials. Because this account has no App installations yet, you're sent straight into GitHub's install flow: choose the test account and select the `review-sandbox` repository. On completing installation, GitHub returns you to the connector, which binds the installation and lands you back in your client, connected — no manual step. (If you take longer than ten minutes on the install page, you'll instead see a note saying to reconnect; reconnecting binds automatically. Either way you end up connected — the zero-installation routing is the product's designed onboarding, not a workaround.)
 
 ### 2. Mint a default (read-only) token
 
