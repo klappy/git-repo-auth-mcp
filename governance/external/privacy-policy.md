@@ -2,7 +2,7 @@
 
 *Operator-approved 2026-06-10. Serving route and docs-tool registration land in the docs-page task.*
 
-*Effective: [DATE]. This policy covers the hosted Git Repo Auth MCP service. If you self-host the same code, you are the operator and this policy does not apply to your instance.*
+*Effective: 2026-06-10. This policy covers the hosted Git Repo Auth MCP service. If you self-host the same code, you are the operator and this policy does not apply to your instance.*
 
 ## What this service does
 
