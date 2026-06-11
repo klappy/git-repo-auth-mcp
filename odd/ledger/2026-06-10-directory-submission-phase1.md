@@ -14,6 +14,8 @@ Session: take git-repo-auth-mcp from custom connector to Claude Connectors Direc
 
 **[D] Fresh-context validation will run three ways before submission:** the operator, a fresh session, and a spawned reviewer agent. Belt, suspenders, and a second belt.
 
+**[D] Upgrades are prorated and immediate (operator decision, added to this PR post-open).** Rationale: the free bucket and low entry tiers exist to let real usage grow; when a user hits the wall after days or weeks of work, upgrading should cost the difference, not a restart. Coexists with the no-refunds stance — proration credits forward on upgrade; cancellation still runs the period out. Mechanism is Stripe proration on subscription changes (configuration, not code: `billing.ts` mirrors whatever Stripe reports, and webhook handlers are already idempotent). Ops task queued to configure and verify it.
+
 ## Observations
 
 **[O] Anthropic's submission requirements moved while we read them.** Two fetches of the same canonical URL (claude.com/docs/connectors/building/submission) within weeks described different submission paths — an admin-settings portal with seven enumerated policy acknowledgments versus open form links with a dashboard "rolling out." The page is visibly mid-migration. Procedure adopted: re-fetch the requirements doc same-day before form-fill; date every requirements claim in planning artifacts.

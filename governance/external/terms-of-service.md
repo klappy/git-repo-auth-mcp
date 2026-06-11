@@ -18,6 +18,7 @@ Git Repo Auth MCP mints short-lived, scoped GitHub App installation tokens on be
 
 - Tier limits and pricing are published at [tiers documentation URL] and served verbatim by the service's `docs` tool. The published document is authoritative; if service behavior and the document disagree, the document wins and the behavior is a bug.
 - Paid tiers are billed via Stripe at the cadence stated per tier (Solo: $24 per two years; Pro: $60 per year; Team and Fleet: monthly). You may cancel anytime; access continues to period end.
+- **Upgrades are prorated and immediate.** Switch to a higher tier at any time; the unused remainder of what you already paid is credited toward the new tier, so you never pay twice for the same days. Downgrades take effect at the end of the current period.
 - **Refunds: none.** Subscriptions are cancel-anytime; access continues to the end of the paid period, and no partial or pro-rated refunds are issued. Try the free tier's 50 mints before paying — it exists so you can know what you're buying.
 - The free tier is a one-time bucket of 50 mints with no expiry.
 
