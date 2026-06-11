@@ -20,6 +20,7 @@ import { normalizePrivateKey } from "./keys";
 import { checkAndRecordMint, recordLiveToken, scopeKey } from "./quota";
 import { emitMeterEvent } from "./billing";
 import { getDocs, listDocs } from "./docs";
+import { computeStats, isOperator } from "./stats";
 import type { Env, GrantProps } from "./types";
 
 type AppAuth = ReturnType<typeof createAppAuth>;
@@ -167,6 +168,34 @@ function buildServer(env: Env, props: GrantProps, ctx: ExecutionContext): McpSer
       return { content: [{ type: "text" as const, text }] };
     }
   );
+
+  if (isOperator(env, props.login)) {
+    server.registerTool(
+      "admin_stats",
+      {
+        title: "Operator stats",
+        annotations: {
+          title: "Operator stats",
+          readOnlyHint: true,
+          idempotentHint: false,
+          openWorldHint: true,
+        },
+        description:
+          `Operator-only aggregate service stats: connected users, active users ` +
+          `(trailing 8 days), paid users, and the crude conversion ratio, with the ` +
+          `paid count cross-checked against Stripe's active subscriptions ` +
+          `(disagreement is surfaced, never reconciled). Aggregates only — no ` +
+          `per-user data. Definitions are the contract in ` +
+          `governance/internal/operator-observability.md; this tool computes, ` +
+          `the document defines.`,
+        inputSchema: {},
+      },
+      async () => {
+        const stats = await computeStats(env);
+        return { content: [{ type: "text" as const, text: JSON.stringify(stats, null, 2) }] };
+      }
+    );
+  }
 
   return server;
 }

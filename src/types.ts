@@ -18,6 +18,10 @@ export interface Env {
   /** Injected by OAuthProvider on the default handler. */
   OAUTH_PROVIDER: OAuthHelpers;
 
+  /** GitHub login of the service operator; enables the operator-only admin_stats
+   *  tool for that login. Absent = the tool is registered for no one. */
+  OPERATOR_LOGIN?: string;
+
   // ---- Metering & billing (all optional: the worker runs unbilled without them) ----
   /** "true" enables quota enforcement; anything else = observe-only accounting. */
   QUOTA_ENFORCE?: string;
