@@ -15,6 +15,7 @@
   "vars": {
     // Public slug of your GitHub App (from its URL: github.com/apps/<slug>)
     "GH_APP_SLUG": "git-repo-auth",
+    "OPERATOR_LOGIN": "klappy",
     // Metering ships observe-only; flip to "true" to enforce quotas.
     "QUOTA_ENFORCE": "false",
     // Stripe price id -> tier id (live mode, Covenynt Ventures LLC)
