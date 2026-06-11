@@ -17,6 +17,9 @@
 import { handlePage } from "./pages";
 import type { AuthRequest } from "@cloudflare/workers-oauth-provider";
 import { encodeState, decodeState } from "./state";
+import { setupOutcome } from "./install";
+import { createAppAuth } from "@octokit/auth-app";
+import { normalizePrivateKey } from "./keys";
 import { handleStripeWebhook, paymentLinkFor } from "./billing";
 import type { Env } from "./types";
 
@@ -51,6 +54,28 @@ async function ghJson<T>(url: string, token: string): Promise<T> {
   });
   if (!res.ok) throw new Error(`GitHub ${url} -> ${res.status}`);
   return res.json() as Promise<T>;
+}
+
+/** App-JWT lookup of an installation's owning account (no user token needed). */
+async function installationAccount(
+  env: Env,
+  installationId: number
+): Promise<{ login: string; type: string } | null> {
+  try {
+    const auth = createAppAuth({
+      appId: env.GH_APP_ID,
+      privateKey: normalizePrivateKey(env.GH_APP_PRIVATE_KEY),
+    });
+    const { token } = await auth({ type: "app" });
+    const res = await fetch(`${GH}/app/installations/${installationId}`, {
+      headers: { authorization: `Bearer ${token}`, accept: "application/vnd.github+json", "user-agent": UA },
+    });
+    if (!res.ok) return null;
+    const j = (await res.json()) as { account: { login: string; type: string } };
+    return { login: j.account.login, type: j.account.type };
+  } catch {
+    return null;
+  }
 }
 
 async function completeFor(
@@ -172,13 +197,20 @@ export const GitHubAuthHandler = {
       }));
 
       if (installations.length === 0) {
-        const install = `https://github.com/apps/${env.GH_APP_SLUG}/installations/new`;
-        return html(
-          `<h2>One step first</h2>
-           <p>Hi <b>${user.login}</b> — the app isn't installed on any account you control yet.</p>
-           <p><a href="${install}">Install it on your repos →</a></p>
-           <p>Then reconnect from your MCP client. The app's permission grant is its ceiling; you choose which repositories it covers.</p>`
-        );
+        // First-time path: park the OAuth transaction and send the user
+        // straight into GitHub's install flow. With the App's Setup URL
+        // configured to /setup, GitHub returns them here post-install with
+        // installation_id + this state, and the transaction resumes — no
+        // manual reconnect on the happy path. If the pending record expires
+        // (10 min) or the Setup URL isn't configured, /setup and reconnect
+        // both degrade gracefully: with >=1 installation, reconnecting
+        // auto-binds.
+        const pid = crypto.randomUUID();
+        const pending: Pending = { oauthReqInfo, login: user.login, installations: [] };
+        await env.OAUTH_KV.put(`pending:${pid}`, JSON.stringify(pending), { expirationTtl: 600 });
+        const install = new URL(`https://github.com/apps/${env.GH_APP_SLUG}/installations/new`);
+        install.searchParams.set("state", pid);
+        return Response.redirect(install.toString(), 302);
       }
 
       if (installations.length === 1) {
@@ -203,6 +235,35 @@ export const GitHubAuthHandler = {
            ${options}
            <button type="submit">Bind connection</button>
          </form>`
+      );
+    }
+
+    // ---- GitHub returns post-install (App Setup URL -> /setup) ----
+    if (url.pathname === "/setup") {
+      const pid = url.searchParams.get("state") ?? "";
+      const instId = Number(url.searchParams.get("installation_id") ?? "");
+      const raw = pid && /^[0-9a-f-]{36}$/i.test(pid) ? await env.OAUTH_KV.get(`pending:${pid}`) : null;
+      if (!raw || !Number.isFinite(instId) || instId <= 0) {
+        // Expired pending, missing state (e.g. installed directly from
+        // github.com/apps), or malformed params: the install still succeeded,
+        // and reconnecting auto-binds. Say so confidently.
+        return html(
+          `<h2>App installed ✓</h2>
+           <p>Now reconnect from your MCP client — with the app installed, connecting binds your account automatically.</p>`
+        );
+      }
+      await env.OAUTH_KV.delete(`pending:${pid}`);
+      const pending = JSON.parse(raw) as Pending;
+      const account = await installationAccount(env, instId);
+      if (setupOutcome(pending.login, account) === "bind" && account) {
+        return completeFor(env, pending.oauthReqInfo, pending.login, {
+          id: instId,
+          account,
+        });
+      }
+      return html(
+        `<h2>App installed${account ? ` on <b>${account.login}</b>` : ""} ✓</h2>
+         <p>Reconnect from your MCP client to bind it — you'll be verified and bound automatically, with a picker if you control several installations.</p>`
       );
     }
 
