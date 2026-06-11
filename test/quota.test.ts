@@ -121,4 +121,15 @@ describe("failed mints are free (charge at check, refund on failure)", () => {
     if (a.ok && a.charge) await refundMint(env, "someone", a.charge);
     expect(store.get("quota:bucket:someone")).toBe("100"); // failed mint refunded
   });
+
+  it("a duplicated refund cannot inflate the free bucket past the doc's grant", async () => {
+    const { env, store } = stubEnv();
+    const a = await checkMint(env, "someone", "scope-a");
+    expect(store.get("quota:bucket:someone")).toBe("99"); // bucket 100, charged
+    if (a.ok && a.charge) {
+      await refundMint(env, "someone", a.charge);
+      await refundMint(env, "someone", a.charge); // retry / duplicate delivery
+    }
+    expect(store.get("quota:bucket:someone")).toBe("100"); // capped, not 101
+  });
 });

@@ -249,7 +249,13 @@ export async function refundMint(env: Env, login: string, charge: MintCharge): P
   if (charge.bucketCharged) {
     const raw = await env.OAUTH_KV.get(`quota:bucket:${login}`);
     if (raw !== null) {
-      await env.OAUTH_KV.put(`quota:bucket:${login}`, String(Number(raw) + 1));
+      // Cap at the bucket size: a retried or duplicated refund must never
+      // inflate the bucket past what the doc grants.
+      const policy = await loadPolicy(env);
+      await env.OAUTH_KV.put(
+        `quota:bucket:${login}`,
+        String(Math.min(policy.freeBucket, Number(raw) + 1))
+      );
     }
   }
 }
