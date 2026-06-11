@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
-import { parseTiersDoc, scopeKey, checkMint, commitMint } from "../src/quota";
+import { parseTiersDoc, scopeKey, checkMint, refundMint } from "../src/quota";
 import { verifyStripeSignature, paymentLinkFor } from "../src/billing";
 
 const tiersDoc = readFileSync("governance/external/tiers.md", "utf8");
@@ -62,7 +62,7 @@ describe("paymentLinkFor", () => {
   });
 });
 
-describe("failed mints are free (charge only after GitHub delivers)", () => {
+describe("failed mints are free (charge at check, refund on failure)", () => {
   // Minimal KV stub: get/put/list over a Map. The policy cache key is
   // pre-seeded with the real tiers.md so loadPolicy never touches the network.
   function stubEnv(tier?: string) {
@@ -77,6 +77,9 @@ describe("failed mints are free (charge only after GitHub delivers)", () => {
         async put(key: string, value: string) {
           store.set(key, value);
         },
+        async delete(key: string) {
+          store.delete(key);
+        },
         async list({ prefix }: { prefix: string; cursor?: string }) {
           const keys = [...store.keys()]
             .filter((k) => k.startsWith(prefix))
@@ -89,31 +92,33 @@ describe("failed mints are free (charge only after GitHub delivers)", () => {
     return { env, store };
   }
 
-  it("checkMint alone never consumes paid quota — repeated checks see full remaining", async () => {
+  it("checkMint charges up front — a second check sees the first one's spend", async () => {
     const { env } = stubEnv("solo");
     const a = await checkMint(env, "someone", "scope-a");
     const b = await checkMint(env, "someone", "scope-b");
     expect(a.ok && b.ok).toBe(true);
-    // Nothing recorded: both report the same post-commit remaining (window - 1).
     if (a.ok && b.ok && !a.cached && !b.cached) {
-      expect(a.remaining).toBe(b.remaining);
-      expect(a.remaining).toBe(9); // solo window 10, anticipated post-commit
+      expect(a.remaining).toBe(9); // solo window 10, charged at check
+      expect(b.remaining).toBe(8); // the first charge is visible to the second
     }
   });
 
-  it("commitMint is what spends the slot", async () => {
+  it("refundMint releases a failed paid mint's charge", async () => {
     const { env } = stubEnv("solo");
-    await commitMint(env, "someone");
-    const after = await checkMint(env, "someone", "scope-c");
+    const a = await checkMint(env, "someone", "scope-a");
+    expect(a.ok).toBe(true);
+    if (a.ok && a.charge) await refundMint(env, "someone", a.charge);
+    const after = await checkMint(env, "someone", "scope-b");
     expect(after.ok).toBe(true);
-    if (after.ok && !after.cached) expect(after.remaining).toBe(8); // one spent, one anticipated
+    if (after.ok && !after.cached) expect(after.remaining).toBe(9); // back to full minus this check
   });
 
-  it("checkMint alone never drains the free bucket; commitMint does", async () => {
+  it("free bucket is charged at check and restored on refund", async () => {
     const { env, store } = stubEnv();
-    await checkMint(env, "someone", "scope-a");
-    expect(store.get("quota:bucket:someone")).toBeUndefined(); // untouched by the check
-    await commitMint(env, "someone");
-    expect(store.get("quota:bucket:someone")).toBe("99"); // bucket 100, one spent
+    const a = await checkMint(env, "someone", "scope-a");
+    expect(store.get("quota:bucket:someone")).toBe("99"); // bucket 100, charged at check
+    expect(a.ok).toBe(true);
+    if (a.ok && a.charge) await refundMint(env, "someone", a.charge);
+    expect(store.get("quota:bucket:someone")).toBe("100"); // failed mint refunded
   });
 });

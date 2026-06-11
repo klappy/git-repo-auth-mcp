@@ -4,8 +4,9 @@
  * bound to props.installationId — GitHub enforces that the resulting token
  * cannot reach any other installation's repositories.
  *
- * Metering brackets the mint (see src/quota.ts): checkMint decides before
- * the GitHub call, commitMint charges only after GitHub delivers — failed
+ * Metering brackets the mint (see src/quota.ts): checkMint enforces and
+ * charges up front so concurrent mints see each other's spend; if GitHub
+ * then refuses the mint, refundMint releases that exact charge — failed
  * mints are free. Same-scope re-requests within a live token's lifetime are
  * cache hits and cost nothing; counted mints are accounted in KV and (when
  * billing is configured) emitted to a Stripe Billing Meter. Tier numbers
@@ -19,7 +20,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { createAppAuth, type InstallationAccessTokenAuthentication } from "@octokit/auth-app";
 import { normalizePrivateKey } from "./keys";
-import { checkMint, commitMint, recordLiveToken, scopeKey } from "./quota";
+import { checkMint, recordLiveToken, refundMint, scopeKey } from "./quota";
 import { emitMeterEvent } from "./billing";
 import { getDocs, listDocs } from "./docs";
 import { computeStats, isOperator } from "./stats";
@@ -115,6 +116,10 @@ function buildServer(env: Env, props: GrantProps, ctx: ExecutionContext): McpSer
           permissions: effectivePermissions,
         })) as InstallationAccessTokenAuthentication;
       } catch (err) {
+        // Failed mints are free (tiers.md): release the charge taken at check time.
+        if (decision.charge) {
+          ctx.waitUntil(refundMint(env, props.login, decision.charge));
+        }
         // GitHub 404s token creation when the installation no longer exists —
         // typically because the App was uninstalled (or uninstalled and
         // reinstalled, which issues a NEW installation id; the old id frozen
@@ -146,7 +151,6 @@ function buildServer(env: Env, props: GrantProps, ctx: ExecutionContext): McpSer
       }
 
       if (!decision.cached) {
-        ctx.waitUntil(commitMint(env, props.login));
         ctx.waitUntil(recordLiveToken(env, props.login, scope, result.expiresAt));
         ctx.waitUntil(emitMeterEvent(env, props.login));
       }

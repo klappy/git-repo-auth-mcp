@@ -124,6 +124,12 @@ async function listMints(env: Env, login: string, sinceMs: number): Promise<Mint
   return out.sort((a, b) => a.ts - b.ts);
 }
 
+/** What a counted check charged, so a failed mint can be refunded exactly. */
+export interface MintCharge {
+  mintKey: string;
+  bucketCharged: boolean;
+}
+
 export interface QuotaOk {
   ok: true;
   cached: boolean;
@@ -132,6 +138,8 @@ export interface QuotaOk {
   window_reset_at?: string;
   weekly_remaining?: number;
   governance_source: GovernanceSource;
+  /** Present on counted (non-cached) mints; hand back to refundMint on failure. */
+  charge?: MintCharge;
 }
 export interface QuotaDenied {
   ok: false;
@@ -149,11 +157,12 @@ export async function getTier(env: Env, login: string): Promise<TierId> {
 }
 
 /**
- * The decision half of the gate. Decides cached-vs-counted and enforces
- * (when QUOTA_ENFORCE is "true" — otherwise observes and always allows),
- * but records NOTHING. Charging happens in commitMint, called only after
- * GitHub actually delivered a token — failed mints are free, by doc
- * promise (tiers.md). `remaining` is reported as the post-commit value.
+ * The whole gate. Decides cached-vs-counted, enforces (when QUOTA_ENFORCE
+ * is "true" — otherwise observes and always allows), and charges up front —
+ * so concurrent checks see each other's spend instead of all passing against
+ * the same stale counts. If GitHub then fails the mint, refundMint releases
+ * the exact charge taken here — failed mints are free, by doc promise
+ * (tiers.md).
  */
 export async function checkMint(
   env: Env,
@@ -181,7 +190,16 @@ export async function checkMint(
       return { ok: false, tier, limit_hit: "bucket_empty", upgrade_url, governance_source: policy.source };
     }
     const next = Math.max(0, remaining - 1);
-    return { ok: true, cached: false, tier, remaining: next, governance_source: policy.source };
+    await env.OAUTH_KV.put(`quota:bucket:${login}`, String(next));
+    const mintKey = await recordMint(env, login, now);
+    return {
+      ok: true,
+      cached: false,
+      tier,
+      remaining: next,
+      governance_source: policy.source,
+      charge: { mintKey, bucketCharged: true },
+    };
   }
 
   const limits = policy.paid[tier];
@@ -207,6 +225,7 @@ export async function checkMint(
       governance_source: policy.source,
     };
   }
+  const mintKey = await recordMint(env, login, now);
   return {
     ok: true,
     cached: false,
@@ -215,23 +234,24 @@ export async function checkMint(
     window_reset_at: new Date((inWindow[0]?.ts ?? now) + policy.windowMs).toISOString(),
     weekly_remaining: Math.max(0, limits.weekly - mints.length - 1),
     governance_source: policy.source,
+    charge: { mintKey, bucketCharged: false },
   };
 }
 
 /**
- * The charging half of the gate. Call only after GitHub actually delivered
- * a token. Failed mints (dead installation, permission mismatch, outage)
- * never reach this and therefore never spend quota.
+ * Release the charge a check took, because GitHub refused the mint (dead
+ * installation, permission mismatch, outage). Uses the recorded charge —
+ * not a re-read of tier, which billing webhooks may have changed in flight —
+ * so exactly what was charged is what gets refunded.
  */
-export async function commitMint(env: Env, login: string, now = Date.now()): Promise<void> {
-  const tier = await getTier(env, login);
-  if (tier === "free") {
-    const policy = await loadPolicy(env);
+export async function refundMint(env: Env, login: string, charge: MintCharge): Promise<void> {
+  await env.OAUTH_KV.delete(charge.mintKey);
+  if (charge.bucketCharged) {
     const raw = await env.OAUTH_KV.get(`quota:bucket:${login}`);
-    const remaining = raw === null ? policy.freeBucket : Number(raw);
-    await env.OAUTH_KV.put(`quota:bucket:${login}`, String(Math.max(0, remaining - 1)));
+    if (raw !== null) {
+      await env.OAUTH_KV.put(`quota:bucket:${login}`, String(Number(raw) + 1));
+    }
   }
-  await recordMint(env, login, now);
 }
 
 async function usageSnapshot(
@@ -258,9 +278,10 @@ async function usageSnapshot(
   };
 }
 
-async function recordMint(env: Env, login: string, now: number): Promise<void> {
+async function recordMint(env: Env, login: string, now: number): Promise<string> {
   const key = `quota:mint:${login}:${String(now).padStart(14, "0")}:${crypto.randomUUID().slice(0, 8)}`;
   await env.OAUTH_KV.put(key, "1", { expirationTtl: 8 * 24 * 3600 });
+  return key;
 }
 
 /** Called after a successful mint so same-scope re-requests become cache hits. */
