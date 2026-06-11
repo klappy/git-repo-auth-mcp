@@ -47,7 +47,7 @@ body{background:var(--paper);color:var(--ink);font-family:var(--disp);font-size:
 ::selection{background:var(--amber);color:var(--ink)}
 a{color:inherit}
 .wrap{max-width:1120px;margin:0 auto;padding:0 24px}
-.mono{font-family:var(--mono)}
+.mono{font-family:var(--mono);overflow-wrap:anywhere}
 
 /* guilloche security texture */
 .guilloche{position:absolute;inset:0;pointer-events:none;opacity:.45;
@@ -156,7 +156,8 @@ h2{font-family:var(--disp);font-variation-settings:'wdth' 76;font-weight:800;fon
 .truth h3{font-family:var(--mono);font-size:13.5px;font-weight:600;letter-spacing:.06em;color:var(--amber);margin-bottom:12px;text-transform:uppercase}
 .truth p{font-size:14.5px;color:#C7CFC8;line-height:1.65}
 .truth p b{color:var(--paper)}
-.kill{margin-top:26px;font-family:var(--mono);font-size:13px;color:#8FA097;display:flex;gap:10px;align-items:baseline}
+.kill{margin-top:26px;font-family:var(--mono);font-size:13px;color:#8FA097}
+.kill b{margin-right:8px}
 .kill b{color:var(--amber)}
 
 /* ---------- uses: ship from chat ---------- */
@@ -218,6 +219,7 @@ footer a{color:var(--viridian)}
   .step+.step{border-left:none;border-top:1.5px solid var(--ink)}
   .step .arrow{display:none}
   .setup .wrap{grid-template-columns:1fr}
+  .setup .wrap > *{min-width:0}
   .bar nav a:not(.btn){display:none}
 }
 </style>
@@ -410,6 +412,7 @@ footer a{color:var(--viridian)}
           <li><span class="mk">&#10003;</span><span>All 5 in the first hour, or one an hour</span></li>
           <li><span class="mk">&#10003;</span><span>$0.20 per agent slot</span></li>
         </ul>
+        <a class="btn btn-primary btn-sm" style="margin-top:16px" href="/buy/solo" >Get Solo</a>
       </div>
       <div class="tier" data-tier="Pro">
         <h3>Pro</h3>
@@ -420,6 +423,7 @@ footer a{color:var(--viridian)}
           <li><span class="mk">&#10003;</span><span>5x the price, <b>6x</b> the agents</span></li>
           <li><span class="mk">&#10003;</span><span>$0.167 per agent slot</span></li>
         </ul>
+        <a class="btn btn-primary btn-sm" style="margin-top:16px" href="/buy/pro" >Get Pro</a>
       </div>
       <div class="tier" data-tier="Team">
         <h3>Team</h3>
@@ -430,6 +434,7 @@ footer a{color:var(--viridian)}
           <li><span class="mk">&#10003;</span><span>A team of agents &mdash; one human, no seats</span></li>
           <li><span class="mk">&#10003;</span><span>$0.125 per agent slot</span></li>
         </ul>
+        <a class="btn btn-primary btn-sm" style="margin-top:16px" href="/buy/team" >Get Team</a>
       </div>
       <div class="tier" data-tier="Fleet">
         <h3>Fleet</h3>
@@ -440,6 +445,7 @@ footer a{color:var(--viridian)}
           <li><span class="mk">&#10003;</span><span>Never think about the window again</span></li>
           <li><span class="mk">&#10003;</span><span>$0.10 per agent slot</span></li>
         </ul>
+        <a class="btn btn-primary btn-sm" style="margin-top:16px" href="/buy/fleet" >Get Fleet</a>
       </div>
     </div>
     <p class="kill" style="margin-top:22px"><b>$</b> Re-requesting the same scope while a token is live is always free. Prices and quotas render from <a href="https://github.com/klappy/git-repo-auth-mcp/blob/main/governance/external/tiers.md" target="_blank" rel="noopener">the governance document the server enforces</a>. Prefer your own keys? <a href="#setup">Self-host for $0, forever</a> &mdash; same code.</p>

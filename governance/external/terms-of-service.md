@@ -2,7 +2,7 @@
 
 *Operator-approved 2026-06-10. Serving route and docs-tool registration land in the docs-page task.*
 
-*Effective: [DATE]. By connecting to the hosted Git Repo Auth MCP service, you agree to these terms. If you self-host the code, these terms do not apply to your instance.*
+*Effective: 2026-06-10. By connecting to the hosted Git Repo Auth MCP service, you agree to these terms. If you self-host the code, these terms do not apply to your instance.*
 
 ## 1. The service
 

@@ -37,3 +37,13 @@ Not done here, deliberately: Stripe products/prices (blocked on captain pricing)
 ## Addendum — customer zero feedback, same day
 
 First prospective customer misread the legacy live page: big "$24 / two years" parsed as $24/month (the actual $1/mo fine print went unseen — happily, he wanted it anyway). Encoded as the hero-number rule in pricing-decisions.md: the big figure on any pricing surface is always the per-month price; everything else is fine print. Branch homepage updated to comply ($0/month heroes; the 50-mint bucket demoted from hero slot to fine print). The misread page stays live until PR #3 merges.
+
+## Addendum — Stripe live objects created via connector, same day
+
+Captain connected the Stripe MCP; objects created directly in live mode (Covenynt Ventures LLC), no keys in chat. Products + prices: Solo $24/2yr (price_1TgrOHPHZ1kOt0d4ROZOt0rZ), Pro $60/yr (price_1TgrONPHZ1kOt0d4XvuAPXsh), Team $25/mo (price_1TgrOUPHZ1kOt0d4ki14AGCo), Fleet $100/mo (price_1TgrOcPHZ1kOt0d4CtxsK6QA). Payment links live and wired to homepage cards; STRIPE_PRICE_MAP + STRIPE_UPGRADE_URL in wrangler vars.
+
+Remaining, operator-side (dashboard, keeps secrets out of chat): Billing Meter `git_token_mint` (connector lacks the endpoint; analytics-only since tiers are flat), webhook endpoint -> https://gitauth.klappy.dev/webhooks/stripe (events: checkout.session.completed, customer.subscription.updated, customer.subscription.deleted) then `wrangler secret put STRIPE_WEBHOOK_SECRET` and `STRIPE_SECRET_KEY`. Then deploy.
+
+## [O-open → CLOSED same day] Binding gap on homepage purchases
+
+Closed by the /buy/{tier} route: buy buttons hit the worker, which runs the existing GitHub login dance (tagged state, same /callback, user token used once and discarded) and redirects to the tier's payment link with client_reference_id={login}. Every purchase path now binds automatically; quota.ts no longer mangles the upgrade URL with a query-on-fragment. Payment links live in STRIPE_PAYMENT_LINKS (tier → URL), validated https-only.

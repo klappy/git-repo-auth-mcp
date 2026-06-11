@@ -79,8 +79,10 @@ function buildServer(env: Env, props: GrantProps, ctx: ExecutionContext): McpSer
     async ({ repositories, permissions }) => {
       // Secure-by-default: an unscoped request mints read-only. Write access
       // must be asked for by name. The ceiling is still the App grant and the
-      // installation — GitHub enforces both.
-      const effectivePermissions = permissions ?? { contents: "read" };
+      // installation — GitHub enforces both. An empty permissions map is
+      // treated the same as an omitted one — it must not bypass the default.
+      const effectivePermissions =
+        permissions && Object.keys(permissions).length > 0 ? permissions : { contents: "read" };
       const scope = await scopeKey(props.installationId, repositories, effectivePermissions);
       const decision = await checkAndRecordMint(env, props.login, scope);
 
