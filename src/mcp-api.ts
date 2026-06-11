@@ -46,10 +46,21 @@ function buildServer(env: Env, props: GrantProps, ctx: ExecutionContext): McpSer
   server.registerTool(
     "github_token",
     {
+      title: "Mint GitHub token",
+      annotations: {
+        title: "Mint GitHub token",
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: true,
+      },
       description:
         `Mint a short-lived (≤1 hour) GitHub token scoped to the '${props.accountLabel}' ` +
-        `installation this connection is bound to. Optionally down-scope to specific ` +
-        `repositories and/or permissions. Usable as a git-over-HTTPS password ` +
+        `installation this connection is bound to. SECURE BY DEFAULT: omitting 'permissions' ` +
+        `mints a READ-ONLY token ({"contents":"read"}). If the task requires writing — pushing ` +
+        `commits, opening PRs — request it explicitly, e.g. {"contents":"write","pull_requests":"write"}. ` +
+        `Request only the scope the task in front of you needs. Optionally down-scope to specific ` +
+        `repositories. Usable as a git-over-HTTPS password ` +
         `(username: x-access-token) or REST API Bearer token. Expiry is the rotation. ` +
         `Responses include quota transparency fields (tier, remaining, window_reset_at, ` +
         `cached) — re-requesting the same scope while a token is live is free. ` +
@@ -62,11 +73,17 @@ function buildServer(env: Env, props: GrantProps, ctx: ExecutionContext): McpSer
         permissions: z
           .record(z.string(), z.string())
           .optional()
-          .describe('Permission map to down-scope, e.g. {"contents":"read"}. Subset of the App grant.'),
+          .describe('Permission map, e.g. {"contents":"write"}. Subset of the App grant. OMITTED = read-only default ({"contents":"read"}). Request write explicitly and only when the task needs it.'),
       },
     },
     async ({ repositories, permissions }) => {
-      const scope = await scopeKey(props.installationId, repositories, permissions);
+      // Secure-by-default: an unscoped request mints read-only. Write access
+      // must be asked for by name. The ceiling is still the App grant and the
+      // installation — GitHub enforces both. An empty permissions map is
+      // treated the same as an omitted one — it must not bypass the default.
+      const effectivePermissions =
+        permissions && Object.keys(permissions).length > 0 ? permissions : { contents: "read" };
+      const scope = await scopeKey(props.installationId, repositories, effectivePermissions);
       const decision = await checkAndRecordMint(env, props.login, scope);
 
       if (!decision.ok) {
@@ -90,7 +107,7 @@ function buildServer(env: Env, props: GrantProps, ctx: ExecutionContext): McpSer
         type: "installation",
         installationId: props.installationId,
         ...(repositories ? { repositoryNames: repositories } : {}),
-        ...(permissions ? { permissions } : {}),
+        permissions: effectivePermissions,
       });
 
       if (!decision.cached) {
@@ -126,6 +143,13 @@ function buildServer(env: Env, props: GrantProps, ctx: ExecutionContext): McpSer
   server.registerTool(
     "docs",
     {
+      title: "Service documentation",
+      annotations: {
+        title: "Service documentation",
+        readOnlyHint: true,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
       description:
         `How this service works, served verbatim from its governance documents: ` +
         `tier limits and pricing mechanics ("tiers"), quota response fields and agent ` +

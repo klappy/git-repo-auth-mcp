@@ -19,8 +19,10 @@
 import OAuthProvider from "@cloudflare/workers-oauth-provider";
 import { GitHubAuthHandler } from "./github-auth";
 import { McpApiHandler } from "./mcp-api";
+import { isOriginAllowed } from "./origin";
+import type { Env } from "./types";
 
-export default new OAuthProvider({
+const provider = new OAuthProvider({
   apiRoute: "/mcp",
   apiHandler: McpApiHandler,
   defaultHandler: GitHubAuthHandler,
@@ -29,3 +31,21 @@ export default new OAuthProvider({
   clientRegistrationEndpoint: "/register",
   scopesSupported: ["github_token"],
 });
+
+export default {
+  fetch(request: Request, env: Env, ctx: ExecutionContext): Response | Promise<Response> {
+    // Origin-header validation (Connectors Directory requirement; see src/origin.ts).
+    // Scoped to the gated /mcp API — the same prefix match the provider uses for
+    // apiRoute — so public routes (OAuth discovery metadata, /authorize, webhooks)
+    // stay reachable from cross-origin browsers.
+    // OPTIONS preflights pass through — the actual request that follows is judged.
+    if (
+      request.method !== "OPTIONS" &&
+      new URL(request.url).pathname.startsWith("/mcp") &&
+      !isOriginAllowed(request.headers.get("Origin"), request.url, env.ALLOWED_ORIGINS)
+    ) {
+      return new Response("Forbidden: cross-origin request rejected", { status: 403 });
+    }
+    return provider.fetch(request, env, ctx);
+  },
+};
