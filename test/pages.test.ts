@@ -26,6 +26,14 @@ describe("mdToHtml", () => {
     expect(html).toContain("bad"); // text survives, link does not
   });
 
+  it("autolinks bare http(s) URLs without double-linking markdown links", () => {
+    const html = mdToHtml("- Issues: https://github.com/klappy/git-repo-auth-mcp/issues\n- [docs](https://example.com)");
+    expect(html).toContain(
+      '<li>Issues: <a href="https://github.com/klappy/git-repo-auth-mcp/issues">https://github.com/klappy/git-repo-auth-mcp/issues</a></li>'
+    );
+    expect(html).toContain('<li><a href="https://example.com">docs</a></li>');
+  });
+
   it("renders tables with the separator row dropped", () => {
     const html = mdToHtml("| Data | Lifetime |\n|---|---|\n| Tokens | 1 hour |");
     expect(html).toContain("<th>Data</th>");

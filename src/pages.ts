@@ -5,7 +5,8 @@
  *
  * The markdown converter is deliberately scoped to the constructs these
  * documents actually use (h1–h3, paragraphs, lists, tables, hr, bold,
- * italics, inline code, http(s)/mailto links). It is not a general renderer
+ * italics, inline code, http(s)/mailto links, bare http(s) URLs). It is not
+ * a general renderer
  * and should not grow into one — if a document needs more, question the
  * document first. All text is HTML-escaped before any transform; links are
  * scheme-allowlisted.
@@ -35,7 +36,8 @@ function inline(s: string): string {
     .replace(/\*([^*]+)\*/g, "<em>$1</em>")
     .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_m, text, href) =>
       /^(https?:|mailto:)/.test(href) ? `<a href="${href}">${text}</a>` : text
-    );
+    )
+    .replace(/(^|\s)(https?:\/\/[^\s<]+)/g, '$1<a href="$2">$2</a>');
 }
 
 export function mdToHtml(md: string): string {
