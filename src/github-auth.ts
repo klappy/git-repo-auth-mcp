@@ -14,6 +14,7 @@
  * stored, logged, or returned.
  */
 
+import { handlePage } from "./pages";
 import type { AuthRequest } from "@cloudflare/workers-oauth-provider";
 import { encodeState, decodeState } from "./state";
 import { handleStripeWebhook, paymentLinkFor } from "./billing";
@@ -77,6 +78,10 @@ export const GitHubAuthHandler = {
     const url = new URL(request.url);
 
     if (url.pathname === "/healthz") return new Response("ok", { status: 200 });
+
+    // ---- Policy pages: /privacy, /terms, /security (live -> bundled governance) ----
+    const pageResponse = await handlePage(url.pathname, env);
+    if (pageResponse) return pageResponse;
 
     // ---- Buy flow entry: identify the buyer, then hand off to Stripe ----
     // /buy/{tier} runs the same GitHub login as connecting, then redirects to
