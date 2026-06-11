@@ -10,6 +10,9 @@ export interface Env {
   GITHUB_CLIENT_SECRET: string;
   /** Public slug of the App, e.g. "git-repo-auth" — used for the install link. */
   GH_APP_SLUG: string;
+  /** Optional comma-separated extra origins allowed to call with an Origin header
+   *  (e.g. a browser-based inspector). Absent = same-origin only. */
+  ALLOWED_ORIGINS?: string;
   /** Provider state: hashed OAuth grants + transient pending records. */
   OAUTH_KV: KVNamespace;
   /** Injected by OAuthProvider on the default handler. */

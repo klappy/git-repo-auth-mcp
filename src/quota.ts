@@ -9,7 +9,7 @@
  *
  * Accounting (KV):
  *   quota:bucket:{login}        free-bucket remaining (lazy-init from policy)
- *   quota:tier:{login}          "pro" | "max_5x" | "max_20x" (set by billing)
+ *   quota:tier:{login}          "solo" | "pro" | "team" | "fleet" (set by billing)
  *   quota:mint:{login}:{ts}:{r} append-only mint log, TTL 8 days
  *   quota:tok:{login}:{scope}   live-token record → same-scope re-mints are
  *                               cache hits and never count (doc promise)
