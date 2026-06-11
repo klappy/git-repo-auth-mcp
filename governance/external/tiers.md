@@ -4,31 +4,32 @@
 
 ## What you are paying for
 
-Concurrency. A minted token lives at most one hour, so "tokens minted per window" is effectively "how many agents can be working on your repos at once." Minting costs the operator almost nothing — your API traffic rides your own GitHub installation's rate limit (5,000–12,500 req/hr, isolated per installation, enforced by GitHub). The tiers price throughput, and we'd rather say that plainly than dress it up.
+Concurrency. A minted token lives at most one hour, and an agent doing real work typically mints twice — a read-only token to look (the secure default), then a write token to act. So every tier budgets **two tokens per agent**: Solo is 5 agents and 10 tokens, Pro is 30 agents and 60 tokens, and so on. We don't police the mix — two reads, two writes, a read and a write, all the same to us; the pair is generosity, not a rule. Minting costs the operator almost nothing — your API traffic rides your own GitHub installation's rate limit (5,000–12,500 req/hr, isolated per installation, enforced by GitHub). The tiers price throughput, and we'd rather say that plainly than dress it up.
 
 ## The tiers
 
-How big is your agentic concurrency? Every tier is one human, no seats — the team is your agents.
+How big is your agentic concurrency? Every tier is one human, no seats — the team is your agents. Tier sizes are agent counts (Solo 5, Pro 30, Team 200, Fleet 1,000); the token column is double that, because looking and acting are both tokens.
 
-| Tier | Tokens per rolling 5-hour window | Weekly backstop | Price |
+| Tier | Tokens per rolling 5-hour window (two per agent) | Weekly backstop | Price |
 |---|---|---|---|
-| Free | one-time bucket of **50 mints total** | — | $0 |
-| Solo | **5** | 60 | $1/mo ($24 per 2 years) |
-| Pro | **30** | 360 | $5/mo ($60 per year) |
-| Team | **200** | 2,400 | $25/mo |
-| Fleet | **1,000** | 12,000 | $100/mo |
+| Free | one-time bucket of **100 mints total** | — | $0 |
+| Solo | **10** | 120 | $1/mo ($24 per 2 years) |
+| Pro | **60** | 720 | $5/mo ($60 per year) |
+| Team | **400** | 4,800 | $25/mo |
+| Fleet | **2,000** | 24,000 | $100/mo |
 
 Billing cadence scales with commitment: Solo is $1/mo billed $24 per two years, Pro is $5/mo billed $60 per year, Team and Fleet are month-to-month. Above it, the per-slot price falls as you climb — $0.20 at Solo, $0.167 at Pro, $0.125 at Team, $0.10 at Fleet — so upgrading is always the better deal per agent. No bundling tricks, no "contact sales." Upgrades are prorated and immediate: switch mid-period and the unused remainder of your current tier is credited toward the new one — a few days or weeks in, when you hit the wall, upgrading costs the difference, not a restart. Downgrades take effect at period end.
 
 ## How the free bucket works
 
-You get 50 mints, once. No windows, no decay, no daily trickle. Use all 50 in an hour or spread them over a month — your call. When the bucket is empty, minting stops and the response tells you how to upgrade. Fifty mints is enough to genuinely feel what it's like to hand an agent your repos; if you burned through them, you already know whether this is worth paying for.
+You get 100 mints, once. No windows, no decay, no daily trickle. Use all 100 in an hour or spread them over a month — your call. When the bucket is empty, minting stops and the response tells you how to upgrade. A hundred mints — fifty look-and-act pairs — is enough to genuinely feel what it's like to hand an agent your repos; if you burned through them, you already know whether this is worth paying for.
 
 ## How paid windows work
 
 - The 5-hour window is **rolling**: each mint counts against you for exactly five hours, then falls off. `window_reset_at` tells you when your next slot frees. Mint your quota in a burst and you wait; spread mints out and you may never notice the window.
 - The **weekly backstop** exists for abuse protection. It is set high enough (12× the window quota) that normal use never touches it.
 - **Cached tokens are free.** Re-requesting the same scope while a previous token is still alive returns the cached token and does not count as a mint. Retries cost you nothing.
+- **Failed mints are free.** If GitHub refuses the mint — a dead installation, a permissions mismatch, an outage — no quota is spent. You are only charged for tokens you actually receive.
 
 ## When you hit a limit
 

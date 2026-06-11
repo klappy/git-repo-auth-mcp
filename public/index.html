@@ -296,7 +296,7 @@ footer .wrap{display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px}
   <div class="wrap">
     <p class="eyebrow">Pricing</p>
     <h2>Pay for how many helpers work at once.</h2>
-    <p class="lede2">Every key lasts an hour, so the only question is how many of your AI helpers can hold a key at the same time. One human, no seats — the team is your AI. Try it free first; the trial is real work, not a demo.</p>
+    <p class="lede2">Every key lasts an hour, so the only question is how many of your AI helpers can hold a key at the same time. Each helper carries two keys — one to look around, one to do the work — and a key that fails to mint costs you nothing. One human, no seats — the team is your AI. Try it free first; the trial is real work, not a demo.</p>
     <div class="tiers" id="tierCards">
       <div class="tier" data-tier="Free">
         <h3>Free</h3>
@@ -382,6 +382,10 @@ footer .wrap{display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px}
       var re = /^\|\s*(Solo|Pro|Team|Fleet)\s*\|\s*\*\*([\d,]+)\*\*\s*\|\s*([\d,]+)\s*\|\s*(\$[\d.]+)\/mo[^|]*\|/gim, m;
       var rows = {};
       while ((m = re.exec(md))) rows[m[1]] = { quota: m[2], price: m[4] };
+      // Two-tokens-per-agent: when the doc declares the pair, the helper
+      // count is half the token column. Older docs without the marker are
+      // 1:1. The doc stays the source of truth either way.
+      var perAgent = /two per agent/i.test(md) ? 2 : 1;
       if (bucket){
         var fq = document.querySelector('[data-tier="Free"] [data-slot="quota"]');
         if (fq) fq.textContent = bucket[1] + ' keys';
@@ -392,7 +396,7 @@ footer .wrap{display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px}
         var p = card.querySelector('[data-slot="price"]');
         var q = card.querySelector('[data-slot="quota"]');
         if (p) p.textContent = rows[name].price;
-        if (q) q.textContent = rows[name].quota;
+        if (q) q.textContent = (Number(rows[name].quota.replace(/,/g, '')) / perAgent).toLocaleString('en-US');
       });
     })
     .catch(function(){ /* mirror stands */ });
