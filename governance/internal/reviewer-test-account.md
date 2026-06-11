@@ -1,6 +1,6 @@
 # Reviewer Test Account — Setup & Step-by-Step Instructions (v2)
 
-Design principle: **the reviewer walks the same path every new user walks.** No out-of-band setup beyond a test identity and sample content. The connect flow handles App installation itself (a zero-installation user is routed to install and bound automatically), and the free tier — 50 mints, no card — is the designed first-run experience, with ample headroom for a full review. The review thereby validates the real onboarding, not a pre-arranged state.
+Design principle: **the reviewer walks the same path every new user walks.** No out-of-band setup beyond a test identity and sample content. The connect flow handles App installation itself (a zero-installation user is routed to install; reconnecting then binds the new installation automatically), and the free tier — 50 mints, no card — is the designed first-run experience, with ample headroom for a full review. The review thereby validates the real onboarding, not a pre-arranged state.
 
 ---
 
@@ -19,7 +19,7 @@ Design principle: **the reviewer walks the same path every new user walks.** No 
 
 ### 1. Connect — and install, in-band
 
-Add the connector with server URL `https://gitauth.klappy.dev/mcp`. Sign in with the provided GitHub test credentials. Because this account has no App installations yet, the flow routes you to GitHub's install page: choose the test account and select the `review-sandbox` repository. On completing installation you're bound automatically and land back in your client, connected. (This zero-installation routing is the product's designed onboarding, not a workaround.)
+Add the connector with server URL `https://gitauth.klappy.dev/mcp`. Sign in with the provided GitHub test credentials. Because this account has no App installations yet, the flow shows a one-step install page: follow the link to GitHub, choose the test account, and select the `review-sandbox` repository. Then reconnect from your client — with the installation now in place, the flow binds it automatically and you land back connected. (This zero-installation routing is the product's designed onboarding, not a workaround.)
 
 ### 2. Mint a default (read-only) token
 

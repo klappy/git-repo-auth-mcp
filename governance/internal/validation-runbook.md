@@ -15,11 +15,11 @@ For the three validators (operator, fresh session, spawned agent), per `klappy:/
 
 ## Pass 2 — Reviewer simulation
 
-Execute `reviewer-test-account-instructions.md` literally, as written, against the real test account. Every deviation between the instructions and reality is a finding — reviewers get no benefit of the doubt, so neither do we.
+Execute `governance/internal/reviewer-test-account.md` literally, as written, against the real test account. Every deviation between the instructions and reality is a finding — reviewers get no benefit of the doubt, so neither do we.
 
 ## Pass 3 — Adversarial read
 
-1. Bare mint returns `contents: read` only. A mint requesting permissions beyond the App grant fails cleanly with an intelligible error.
+1. Bare mint requests `contents: read` only (GitHub's response adds its automatic `metadata: read` — expect exactly those two, nothing broader). A mint requesting permissions beyond the App grant fails cleanly with an intelligible error.
 2. Quota wall: confirm the error shape (and note the `upgrade_url` field — flag if the operator's Directory Policy read marked it).
 3. Multi-surface: connector works on Claude.ai web, Claude Desktop, Claude mobile. Record pass/fail per surface for the form's launch-readiness field.
 4. Hostile-content thought test: does anything in tool descriptions or docs-tool output instruct an agent in ways a poisoned document could exploit? (Descriptions should inform the model, never command it toward broader scope.)
