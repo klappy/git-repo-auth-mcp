@@ -303,7 +303,7 @@ footer .wrap{display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px}
         <p class="price">$0</p>
         <span class="per">one-time trial — no card</span>
         <ul>
-          <li><b data-slot="quota">50 keys</b> to genuinely try it</li>
+          <li><b data-slot="quota">100 keys</b> to genuinely try it</li>
           <li>A clean stop, then you decide</li>
         </ul>
       </div>
@@ -379,6 +379,7 @@ footer .wrap{display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px}
     .then(function(r){ return r.ok ? r.text() : Promise.reject(); })
     .then(function(md){
       var bucket = md.match(/bucket of \*\*(\d+) mints? total\*\*/i);
+      // Twin of PAGE_ROW_RE in test/quota.test.ts — change both together.
       var re = /^\|\s*(Solo|Pro|Team|Fleet)\s*\|\s*\*\*([\d,]+)\*\*\s*\|\s*([\d,]+)\s*\|\s*(\$[\d.]+)\/mo[^|]*\|/gim, m;
       var rows = {};
       while ((m = re.exec(md))) rows[m[1]] = { quota: m[2], price: m[4] };

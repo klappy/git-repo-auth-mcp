@@ -405,7 +405,7 @@ footer a{color:var(--viridian)}
         <p class="price">$0</p>
         <span class="per">one-time trial &mdash; no card</span>
         <ul>
-          <li><span class="mk">&#10003;</span><span>Bucket of <b data-slot="quota">50 mints</b>, total</span></li>
+          <li><span class="mk">&#10003;</span><span>Bucket of <b data-slot="quota">100 mints</b>, total</span></li>
           <li><span class="mk">&#10003;</span><span>No decay &mdash; a clean wall, then you decide</span></li>
         </ul>
       </div>
@@ -596,6 +596,7 @@ openssl pkcs8 -topk8 -inform PEM \
     .then(function(r){ return r.ok ? r.text() : Promise.reject(); })
     .then(function(md){
       var bucket = md.match(/bucket of \*\*(\d+) mints? total\*\*/i);
+      // Twin of PAGE_ROW_RE in test/quota.test.ts — change both together.
       var re = /^\|\s*(Solo|Pro|Team|Fleet)\s*\|\s*\*\*([\d,]+)\*\*\s*\|\s*([\d,]+)\s*\|\s*(\$[\d.]+)\/mo[^|]*\|/gim, m;
       var rows = {};
       while ((m = re.exec(md))) rows[m[1]] = { quota: m[2], weekly: m[3], price: m[4] };
