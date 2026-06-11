@@ -3,224 +3,190 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Git Repo Auth MCP — tokens that die on their own</title>
-<meta name="description" content="Worker-minted, short-lived, scoped GitHub App tokens over MCP. Stop pasting credentials into chat.">
-<link rel="icon" href="/favicon.ico" sizes="48x48">
-<link rel="icon" href="/favicon.svg" type="image/svg+xml">
-<link rel="apple-touch-icon" href="/apple-touch-icon.png">
-<link rel="manifest" href="/site.webmanifest">
-<meta name="theme-color" content="#0E5A4A">
+<title>Git Repo Auth — your AI can build things. This lets it save them, safely.</title>
 <link rel="canonical" href="https://gitauth.klappy.dev/">
 <meta property="og:type" content="website">
-<meta property="og:site_name" content="Git Repo Auth MCP">
-<meta property="og:title" content="Git Repo Auth MCP — tokens that die on their own">
-<meta property="og:description" content="Worker-minted, short-lived, scoped GitHub App tokens over MCP. Stop pasting credentials into chat.">
+<meta property="og:site_name" content="Git Repo Auth">
+<meta property="og:title" content="Your AI can build things. This lets it save them — safely.">
+<meta property="og:description" content="Connect GitHub once. Every job gets a fresh key that opens one door and expires in an hour. You never touch a key.">
 <meta property="og:url" content="https://gitauth.klappy.dev/">
 <meta property="og:image" content="https://gitauth.klappy.dev/og-image.png">
-<meta property="og:image:width" content="1200">
-<meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="A viridian coin struck with a paper key whose bow is a clock dial — tokens that expire within the hour.">
-<meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="Git Repo Auth MCP — tokens that die on their own">
-<meta name="twitter:description" content="Worker-minted, short-lived, scoped GitHub App tokens over MCP. Stop pasting credentials into chat.">
-<meta name="twitter:image" content="https://gitauth.klappy.dev/og-image.png">
+<meta name="description" content="Your AI can build things. This lets it save them — safely. Keys made fresh, expired in an hour, never touched by you.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 :root{
-  --paper:#FAFAF6;
-  --paper-deep:#F1F0E8;
-  --ink:#16201B;
-  --ink-soft:#4A554E;
-  --viridian:#0E5A4A;
-  --viridian-deep:#0A4036;
-  --amber:#D9A441;
-  --stamp:#B33A2B;
-  --line:#D8D6CB;
+  --lobby:#FFFFFF;          /* pure white ground */
+  --lobby-deep:#F0F3F1;
+  --ink:#0E1311;            /* true near-black */
+  --ink-soft:#373D3A;       /* neutral, not green-gray */
+  --viridian:#0E5A4A;       /* brand, carried over */
+  --pine:#08322A;           /* deepened display green */
+  --amber:#D9A441;          /* carried over — the hour */
+  --stamp:#B33A2B;          /* carried over — expiry ONLY */
+  --line:#C7CCC9;
   --mono:'IBM Plex Mono',ui-monospace,monospace;
   --disp:'Archivo',system-ui,sans-serif;
 }
 *{margin:0;padding:0;box-sizing:border-box}
 html{scroll-behavior:smooth}
-body{background:var(--paper);color:var(--ink);font-family:var(--disp);font-size:17px;line-height:1.6;-webkit-font-smoothing:antialiased}
+body{background:var(--lobby);color:var(--ink);font-family:var(--disp);font-size:17.5px;line-height:1.65;-webkit-font-smoothing:antialiased}
 ::selection{background:var(--amber);color:var(--ink)}
 a{color:inherit}
-.wrap{max-width:1120px;margin:0 auto;padding:0 24px}
-.mono{font-family:var(--mono);overflow-wrap:anywhere}
+img{max-width:100%}
+.wrap{max-width:1080px;margin:0 auto;padding:0 24px}
+.mono{font-family:var(--mono)}
+:focus-visible{outline:3px solid var(--amber);outline-offset:3px;border-radius:4px}
 
-/* guilloche security texture */
-.guilloche{position:absolute;inset:0;pointer-events:none;opacity:.45;
-  background-image:repeating-radial-gradient(circle at 0 0, transparent 0, transparent 9px, rgba(14,90,74,.07) 9px, rgba(14,90,74,.07) 10px);
-}
+/* ---------- eyebrow / labels: condensed Archivo, the utility voice ---------- */
+.eyebrow{font-family:var(--disp);font-variation-settings:'wdth' 70,'wght' 640;
+  text-transform:uppercase;letter-spacing:.14em;font-size:12.5px;color:var(--viridian)}
 
 /* ---------- top bar ---------- */
-header{border-bottom:1.5px solid var(--ink);position:sticky;top:0;background:var(--paper);z-index:50}
-.bar{display:flex;align-items:center;justify-content:space-between;height:60px}
-.brand{font-family:var(--mono);font-weight:600;font-size:14px;letter-spacing:.04em;display:flex;align-items:center;gap:10px}
-.brand .dot{width:9px;height:9px;border-radius:50%;background:var(--viridian);display:inline-block}
-.bar nav{display:flex;gap:22px;align-items:center;font-size:14px}
-.bar nav a{text-decoration:none;color:var(--ink-soft)}
-.bar nav a:hover{color:var(--ink)}
-.btn{display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-size:14px;font-weight:600;text-decoration:none;padding:11px 20px;border:1.5px solid var(--ink);transition:transform .12s ease, box-shadow .12s ease;cursor:pointer;background:transparent;color:var(--ink)}
-.btn:hover{transform:translate(-2px,-2px);box-shadow:3px 3px 0 var(--ink)}
-.btn:focus-visible{outline:3px solid var(--amber);outline-offset:2px}
-.btn-primary{background:var(--viridian);border-color:var(--viridian-deep);color:var(--paper)}
-.btn-primary:hover{box-shadow:3px 3px 0 var(--viridian-deep)}
-.btn-sm{padding:8px 14px;font-size:13px}
+header{position:sticky;top:0;background:color-mix(in srgb,var(--lobby) 88%,transparent);
+  backdrop-filter:blur(8px);z-index:50;border-bottom:1px solid var(--line)}
+.bar{display:flex;align-items:center;justify-content:space-between;height:62px}
+.brand{display:flex;align-items:center;gap:10px;font-variation-settings:'wdth' 72,'wght' 700;
+  text-transform:uppercase;letter-spacing:.1em;font-size:13px}
+.brand .bell{width:22px;height:22px;border-radius:50%;background:var(--viridian);
+  display:grid;place-items:center;color:var(--lobby);font-size:11px}
+nav.top{display:flex;gap:26px;font-size:14px}
+nav.top a{text-decoration:none;color:var(--ink-soft)}
+nav.top a:hover{color:var(--ink)}
+.connect-sm{background:var(--viridian);color:var(--lobby);border-radius:999px;
+  padding:8px 18px;font-size:14px;text-decoration:none;font-weight:600}
+.connect-sm:hover{background:var(--pine)}
 
 /* ---------- hero ---------- */
-.hero{position:relative;border-bottom:1.5px solid var(--ink);overflow:hidden;background:var(--paper)}
-.hero .wrap{display:grid;grid-template-columns:1.05fr .95fr;gap:48px;padding-top:72px;padding-bottom:80px;position:relative}
-.eyebrow{font-family:var(--mono);font-size:12.5px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--viridian);display:flex;align-items:center;gap:10px;margin-bottom:22px}
-.eyebrow::before{content:"";width:34px;height:1.5px;background:var(--viridian)}
-h1{font-family:var(--disp);font-variation-settings:'wdth' 72;font-weight:850;font-size:clamp(40px,5.4vw,68px);line-height:.98;letter-spacing:-.015em;text-transform:uppercase}
-h1 .accent{color:var(--viridian)}
-.lede{margin-top:24px;font-size:18.5px;color:var(--ink-soft);max-width:46ch}
-.lede strong{color:var(--ink)}
-.cta-row{margin-top:34px;display:flex;gap:14px;flex-wrap:wrap;align-items:center}
-.clone{margin-top:18px;display:inline-flex;align-items:center;gap:0;border:1.5px solid var(--line);background:var(--paper-deep)}
-.clone code{font-family:var(--mono);font-size:13px;padding:10px 14px;color:var(--ink-soft)}
-.clone button{border:none;border-left:1.5px solid var(--line);background:transparent;font-family:var(--mono);font-size:12.5px;font-weight:600;padding:10px 14px;cursor:pointer;color:var(--viridian)}
-.clone button:hover{background:var(--viridian);color:var(--paper)}
+.hero{padding:84px 0 96px;border-bottom:1px solid var(--line);position:relative;overflow:hidden}
+.hero .wrap{display:grid;grid-template-columns:1.1fr .9fr;gap:64px;align-items:center}
+h1{font-variation-settings:'wdth' 112,'wght' 820;line-height:1.02;
+  font-size:clamp(38px,5.4vw,62px);letter-spacing:-.015em;color:var(--pine)}
+h1 .quiet{display:block;color:var(--viridian);font-variation-settings:'wdth' 96,'wght' 580;
+  font-size:.62em;margin-top:14px;letter-spacing:0}
+.hero p.lede{margin-top:26px;max-width:46ch;font-size:19px;color:var(--ink-soft)}
+.hero .cta-row{margin-top:36px;display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+.cta{background:var(--viridian);color:var(--lobby);border-radius:999px;padding:15px 30px;
+  font-size:17px;font-weight:650;text-decoration:none;transition:transform .15s ease,background .15s ease}
+.cta:hover{background:var(--pine);transform:translateY(-1px)}
+.tech-link{font-size:15px;color:var(--ink-soft);text-decoration:none;border-bottom:1px solid var(--line)}
+.tech-link:hover{color:var(--ink);border-color:var(--ink)}
 
-/* ---------- the token credential card (signature) ---------- */
-.pass-zone{display:flex;align-items:center;justify-content:center;position:relative}
-.pass{width:100%;max-width:430px;background:#fff;border:1.5px solid var(--ink);box-shadow:7px 7px 0 rgba(22,32,27,.12);position:relative}
-.pass-head{display:flex;justify-content:space-between;align-items:center;padding:14px 18px;border-bottom:1.5px dashed var(--line);background:var(--viridian);color:var(--paper)}
-.pass-head .t1{font-family:var(--mono);font-size:11.5px;font-weight:600;letter-spacing:.16em;text-transform:uppercase}
-.pass-head .t2{font-family:var(--mono);font-size:11.5px;opacity:.75}
-.pass-body{padding:20px 18px 16px;position:relative}
-.tok{font-family:var(--mono);font-size:14.5px;font-weight:600;word-break:break-all;letter-spacing:.01em;min-height:44px}
-.tok .dim{color:var(--ink-soft);opacity:.55}
-.fields{margin-top:18px;display:grid;grid-template-columns:1fr 1fr;gap:12px 18px}
-.f label{display:block;font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-soft);margin-bottom:3px}
-.f div{font-family:var(--mono);font-size:13px;font-weight:500}
-.ttl{margin-top:20px}
-.ttl-top{display:flex;justify-content:space-between;font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-soft);margin-bottom:6px}
-.ttl-top b{color:var(--ink);font-size:13px;font-variant-numeric:tabular-nums}
-.ttl-bar{height:10px;border:1.5px solid var(--ink);background:repeating-linear-gradient(45deg,var(--paper-deep) 0 6px,#fff 6px 12px);position:relative;overflow:hidden}
-.ttl-fill{position:absolute;inset:0;background:var(--amber);transform-origin:left;width:100%}
-.pass-foot{border-top:1.5px dashed var(--line);padding:11px 18px;display:flex;justify-content:space-between;align-items:center;font-family:var(--mono);font-size:11px;color:var(--ink-soft)}
-.perf{position:absolute;left:-7px;top:50%;width:14px;height:14px;border-radius:50%;background:var(--paper);border:1.5px solid var(--ink)}
-.perf.r{left:auto;right:-7px}
-.stamp{position:absolute;top:42%;left:50%;transform:translate(-50%,-50%) rotate(-9deg) scale(1);font-family:var(--mono);font-weight:600;font-size:26px;letter-spacing:.18em;color:var(--stamp);border:3px solid var(--stamp);padding:6px 16px;text-transform:uppercase;opacity:0;pointer-events:none;background:rgba(250,250,246,.78)}
-.pass.dead .stamp{opacity:1}
-.pass.dead .tok,.pass.dead .fields,.pass.dead .ttl{opacity:.32;filter:saturate(.4)}
-@media (prefers-reduced-motion: no-preference){
-  .stamp{transition:opacity .15s ease, transform .15s cubic-bezier(.2,2.4,.4,1)}
-  .pass.dead .stamp{transform:translate(-50%,-50%) rotate(-9deg) scale(1)}
-  .pass:not(.dead) .stamp{transform:translate(-50%,-50%) rotate(-9deg) scale(1.6)}
+/* ---------- THE SIGNATURE: the expiring keycard ---------- */
+.deskscene{display:grid;place-items:center;position:relative;min-height:380px}
+.keycard{width:min(310px,78vw);aspect-ratio:1.586;border-radius:16px;position:relative;
+  background:linear-gradient(135deg,#FFFFFF 0%,#F2F5F3 100%);
+  border:1.5px solid var(--line);
+  box-shadow:0 24px 48px -20px rgba(8,50,42,.28),0 4px 10px rgba(8,50,42,.08);
+  padding:22px 24px;display:flex;flex-direction:column;justify-content:space-between;
+  animation:lifecycle 12s ease-in-out infinite}
+.keycard .row1{display:flex;justify-content:space-between;align-items:flex-start}
+.keycard .who{font-variation-settings:'wdth' 70,'wght' 640;text-transform:uppercase;
+  letter-spacing:.12em;font-size:11.5px;color:var(--ink)}
+.keycard .who b{display:block;font-size:15px;color:var(--pine);letter-spacing:.02em;margin-top:3px;
+  font-variation-settings:'wdth' 100,'wght' 700;text-transform:none}
+.keycard .token{font-family:var(--mono);font-size:12.5px;color:var(--viridian);
+  overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.keycard .room{font-variation-settings:'wdth' 124,'wght' 860;font-size:30px;color:var(--pine)}
+.keycard .room small{display:block;font-variation-settings:'wdth' 70,'wght' 600;font-size:11px;
+  text-transform:uppercase;letter-spacing:.14em;color:var(--ink);margin-bottom:2px}
+/* the hour dial — bow of the key is a clock */
+.dial{width:62px;height:62px;position:relative;flex:none}
+.dial svg{width:100%;height:100%;transform:rotate(-90deg)}
+.dial .track{fill:none;stroke:var(--lobby-deep);stroke-width:7}
+.dial .left{fill:none;stroke:var(--amber);stroke-width:7;stroke-linecap:round;
+  stroke-dasharray:163.3;animation:drain 12s linear infinite}
+.dial .mid{position:absolute;inset:0;display:grid;place-items:center;
+  font-family:var(--mono);font-size:11.5px;font-weight:500;color:var(--ink)}
+/* stamp that appears on mint */
+.stamp{position:absolute;top:14px;right:-12px;transform:rotate(8deg);
+  border:2px solid var(--viridian);color:var(--viridian);border-radius:6px;
+  font-variation-settings:'wdth' 70,'wght' 700;text-transform:uppercase;
+  letter-spacing:.14em;font-size:10.5px;padding:3px 8px;background:var(--lobby);
+  animation:stampin 12s ease-in-out infinite}
+/* EXPIRED overlay — the only red on the page */
+.expired{position:absolute;inset:0;display:grid;place-items:center;pointer-events:none;
+  opacity:0;animation:expirein 12s ease-in-out infinite}
+.expired span{border:2.5px solid var(--stamp);color:var(--stamp);border-radius:8px;
+  padding:6px 16px;font-variation-settings:'wdth' 76,'wght' 800;text-transform:uppercase;
+  letter-spacing:.2em;font-size:18px;transform:rotate(-10deg);background:color-mix(in srgb,var(--lobby) 80%,transparent)}
+.scenecap{margin-top:26px;text-align:center;font-size:14.5px;color:var(--ink-soft);font-family:var(--mono)}
+@keyframes lifecycle{
+  0%{opacity:0;transform:translateY(14px) scale(.97)}
+  6%{opacity:1;transform:translateY(0) scale(1)}
+  82%{opacity:1;transform:translateY(0) scale(1);filter:saturate(1)}
+  92%{opacity:.45;filter:saturate(.2)}
+  97%,100%{opacity:0;transform:translateY(-6px) scale(.985);filter:saturate(.1)}
 }
-.demo-note{position:absolute;bottom:-30px;left:0;right:0;text-align:center;font-family:var(--mono);font-size:11px;color:var(--ink-soft)}
+@keyframes drain{0%,6%{stroke-dashoffset:0}88%,100%{stroke-dashoffset:163.3}}
+@keyframes stampin{0%,4%{opacity:0;transform:rotate(8deg) scale(1.6)}
+  7%{opacity:1;transform:rotate(8deg) scale(1)}86%{opacity:1}92%,100%{opacity:0}}
+@keyframes expirein{0%,84%{opacity:0}90%,96%{opacity:1}100%{opacity:0}}
+@media (prefers-reduced-motion:reduce){
+  .keycard,.dial .left,.stamp,.expired{animation:none}
+  .expired{opacity:0}.stamp{opacity:1}
+  .dial .left{stroke-dashoffset:40}
+}
 
-/* ---------- ledger: before/after ---------- */
-.ledger{border-bottom:1.5px solid var(--ink);background:var(--paper-deep)}
-.ledger .wrap{padding-top:64px;padding-bottom:64px}
-.sec-label{font-family:var(--mono);font-size:12.5px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--viridian);margin-bottom:14px}
-h2{font-family:var(--disp);font-variation-settings:'wdth' 76;font-weight:800;font-size:clamp(26px,3.4vw,40px);line-height:1.05;text-transform:uppercase;letter-spacing:-.01em;max-width:24ch}
-.compare{margin-top:38px;display:grid;grid-template-columns:1fr 1fr;border:1.5px solid var(--ink);background:#fff}
-.col{padding:28px}
-.col+.col{border-left:1.5px solid var(--ink)}
-.col h3{font-family:var(--mono);font-size:13px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;display:flex;align-items:center;gap:9px;margin-bottom:18px}
-.tag{font-size:10px;padding:3px 8px;border:1.5px solid currentColor;letter-spacing:.1em}
-.col.bad h3{color:var(--stamp)}
-.col.good h3{color:var(--viridian)}
-.col ul{list-style:none}
-.col li{padding:10px 0;border-top:1px solid var(--line);font-size:15.5px;display:flex;gap:12px;align-items:baseline}
-.col li:first-of-type{border-top:none}
-.col li .mk{font-family:var(--mono);font-size:13px;flex:0 0 16px}
-.col.bad .mk{color:var(--stamp)}
-.col.good .mk{color:var(--viridian)}
+/* ---------- three beats ---------- */
+.beats{padding:88px 0;border-bottom:1px solid var(--line)}
+.beats .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-top:42px}
+.beat{background:#fff;border:1px solid var(--line);border-radius:18px;padding:30px 28px}
+.beat .glyph{width:44px;height:44px;border-radius:12px;background:var(--lobby-deep);
+  display:grid;place-items:center;font-size:20px;margin-bottom:18px}
+.beat h3{font-variation-settings:'wdth' 104,'wght' 740;font-size:21px;color:var(--pine);margin-bottom:8px}
+.beat p{font-size:16px;color:var(--ink-soft)}
+h2{font-variation-settings:'wdth' 110,'wght' 800;font-size:clamp(28px,3.6vw,40px);
+  color:var(--pine);letter-spacing:-.01em;line-height:1.1;margin-top:14px}
 
-/* ---------- how it works ---------- */
-.how{border-bottom:1.5px solid var(--ink)}
-.how .wrap{padding-top:64px;padding-bottom:72px}
-.steps{margin-top:38px;display:grid;grid-template-columns:repeat(3,1fr);gap:0;border:1.5px solid var(--ink)}
-.step{padding:26px 24px 30px;background:#fff;position:relative}
-.step+.step{border-left:1.5px solid var(--ink)}
-.step .n{font-family:var(--mono);font-size:12px;font-weight:600;color:var(--paper);background:var(--viridian);display:inline-block;padding:4px 10px;letter-spacing:.1em;margin-bottom:16px}
-.step h3{font-family:var(--disp);font-weight:750;font-size:19px;margin-bottom:10px;line-height:1.25}
-.step p{font-size:14.5px;color:var(--ink-soft)}
-.step code{font-family:var(--mono);font-size:13px;background:var(--paper-deep);padding:2px 6px;border:1px solid var(--line)}
-.step .arrow{position:absolute;top:50%;right:-13px;transform:translateY(-50%);z-index:2;background:var(--paper);border:1.5px solid var(--ink);width:24px;height:24px;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:13px}
-
-/* ---------- honest security ---------- */
-.honest{border-bottom:1.5px solid var(--ink);background:var(--ink);color:var(--paper)}
-.honest .wrap{padding-top:64px;padding-bottom:72px}
-.honest .sec-label{color:var(--amber)}
-.honest h2{color:var(--paper)}
-.honest .intro{margin-top:16px;color:#B9C2BB;max-width:62ch;font-size:16.5px}
-.truths{margin-top:38px;display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
-.truth{border:1.5px solid #3A463F;padding:24px 22px;background:#1C2620}
-.truth h3{font-family:var(--mono);font-size:13.5px;font-weight:600;letter-spacing:.06em;color:var(--amber);margin-bottom:12px;text-transform:uppercase}
-.truth p{font-size:14.5px;color:#C7CFC8;line-height:1.65}
-.truth p b{color:var(--paper)}
-.kill{margin-top:26px;font-family:var(--mono);font-size:13px;color:#8FA097}
-.kill b{margin-right:8px}
-.kill b{color:var(--amber)}
-
-/* ---------- uses: ship from chat ---------- */
-.uses{border-bottom:1.5px solid var(--ink);background:var(--paper-deep)}
-.uses .wrap{padding-top:64px;padding-bottom:72px}
-.uses-grid{margin-top:38px;display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
-.use{border:1.5px solid var(--ink);padding:24px 22px;background:#fff}
-.use h3{font-family:var(--mono);font-size:13.5px;font-weight:600;letter-spacing:.06em;color:var(--viridian);margin-bottom:12px;text-transform:uppercase}
-.use p{font-size:14.5px;color:var(--ink-soft);line-height:1.65}
-.use p b{color:var(--ink)}
+/* ---------- the comparison: master key vs your keys ---------- */
+.compare{padding:88px 0;border-bottom:1px solid var(--line);background:var(--lobby-deep)}
+.compare .duo{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:42px}
+.panel{border-radius:18px;padding:34px 30px;border:1px solid var(--line);background:#fff}
+.panel.bad{background:repeating-linear-gradient(45deg,#fff,#fff 14px,#F6F8F7 14px,#F6F8F7 15px)}
+.panel .tag{display:inline-block;font-variation-settings:'wdth' 70,'wght' 680;text-transform:uppercase;
+  letter-spacing:.13em;font-size:11.5px;padding:5px 12px;border-radius:999px;margin-bottom:20px}
+.panel.bad .tag{background:var(--lobby-deep);color:var(--ink-soft)}
+.panel.good .tag{background:var(--viridian);color:var(--lobby)}
+.panel h3{font-variation-settings:'wdth' 106,'wght' 760;font-size:23px;color:var(--pine)}
+.panel ul{list-style:none;margin-top:18px;display:grid;gap:12px}
+.panel li{font-size:16px;color:var(--ink-soft);padding-left:26px;position:relative}
+.panel li::before{content:'';position:absolute;left:0;top:7px;width:12px;height:12px;border-radius:50%}
+.panel.bad li::before{background:var(--line)}
+.panel.good li::before{background:var(--amber)}
 
 /* ---------- pricing ---------- */
-.tiers{margin-top:38px;display:grid;grid-template-columns:repeat(5,1fr);border:1.5px solid var(--ink);background:#fff}
-.tier{padding:24px 18px 26px;position:relative}
-.tier+.tier{border-left:1.5px solid var(--ink)}
-.tier h3{font-family:var(--mono);font-size:13px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--viridian);display:flex;align-items:center;gap:8px;margin-bottom:14px}
-.tier .price{font-size:32px;margin-bottom:6px}
-.tier .per{display:block;font-family:var(--mono);font-size:11.5px;color:var(--ink-soft);margin-bottom:16px;letter-spacing:.04em}
-.tier ul{list-style:none}
-.tier li{padding:8px 0;border-top:1px solid var(--line);font-size:13.5px;color:var(--ink-soft);display:flex;gap:9px;align-items:baseline}
-.tier li:first-of-type{border-top:none}
-.tier li .mk{font-family:var(--mono);font-size:12px;color:var(--viridian);flex:0 0 14px}
-.tier li b{color:var(--ink)}
-.tier.hot{background:var(--paper-deep);box-shadow:inset 0 3px 0 var(--amber)}
-@media (max-width:1024px){.tiers{grid-template-columns:1fr 1fr}.tier:nth-child(n+3){border-top:1.5px solid var(--ink)}.tier:nth-child(odd){border-left:none}.tier:nth-child(2){border-left:1.5px solid var(--ink)}}
-@media (max-width:560px){.tiers{grid-template-columns:1fr}.tier+.tier{border-left:none;border-top:1.5px solid var(--ink)}}
-.pricing{border-bottom:1.5px solid var(--ink)}
-.pricing .wrap{padding-top:64px;padding-bottom:72px}
-.price{font-family:var(--mono);font-size:42px;font-weight:600;margin-bottom:16px;letter-spacing:-.02em}
-.price span{font-size:14px;color:var(--ink-soft);font-weight:400;letter-spacing:0}
-.col .btn{margin-top:20px}
+.pricing{padding:88px 0;border-bottom:1px solid var(--line)}
+.pricing .lede2{margin-top:16px;max-width:58ch;font-size:17px;color:var(--ink-soft)}
+.tiers{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-top:42px}
+.tier{background:#fff;border:1px solid var(--line);border-radius:16px;padding:24px 20px;display:flex;flex-direction:column}
+.tier.hot{border:2px solid var(--viridian);box-shadow:0 14px 30px -18px rgba(8,50,42,.35)}
+.tier h3{font-variation-settings:'wdth' 104,'wght' 760;font-size:18px;color:var(--pine)}
+.tier .price{font-variation-settings:'wdth' 118,'wght' 850;font-size:34px;color:var(--pine);margin-top:6px}
+.tier .per{font-size:12.5px;color:var(--ink-soft);display:block;margin-top:2px;min-height:34px}
+.tier ul{list-style:none;margin-top:14px;display:grid;gap:8px;flex:1}
+.tier li{font-size:14px;color:var(--ink-soft);padding-left:20px;position:relative}
+.tier li::before{content:'';position:absolute;left:0;top:6px;width:10px;height:10px;border-radius:50%;background:var(--amber)}
+.tier .buy{margin-top:16px;text-align:center;background:var(--viridian);color:#fff;border-radius:999px;padding:9px 0;font-size:14px;font-weight:650;text-decoration:none}
+.tier .buy:hover{background:var(--pine)}
+.pricing .source{margin-top:24px;font-size:14px;color:var(--ink-soft)}
+.pricing .source a{color:var(--viridian)}
+@media (max-width:1020px){.tiers{grid-template-columns:repeat(2,1fr)}}
+@media (max-width:560px){.tiers{grid-template-columns:1fr}}
 
-/* ---------- setup ---------- */
-.setup{border-bottom:1.5px solid var(--ink)}
-.setup .wrap{padding-top:64px;padding-bottom:72px;display:grid;grid-template-columns:.9fr 1.1fr;gap:48px;align-items:start}
-.setup .left p{margin-top:16px;color:var(--ink-soft);max-width:40ch}
-.setup .left .fine{margin-top:22px;font-family:var(--mono);font-size:12.5px;color:var(--ink-soft);border-left:3px solid var(--amber);padding-left:14px;line-height:1.7}
-.term{border:1.5px solid var(--ink);background:#fff;box-shadow:7px 7px 0 rgba(22,32,27,.12)}
-.term-head{display:flex;justify-content:space-between;align-items:center;border-bottom:1.5px solid var(--ink);padding:10px 16px;font-family:var(--mono);font-size:12px;letter-spacing:.08em;color:var(--ink-soft)}
-.term-head button{border:1.5px solid var(--ink);background:transparent;font-family:var(--mono);font-size:11.5px;font-weight:600;padding:5px 11px;cursor:pointer}
-.term-head button:hover{background:var(--ink);color:var(--paper)}
-.term pre{padding:20px 18px;overflow-x:auto;font-family:var(--mono);font-size:13.5px;line-height:1.85;color:var(--ink)}
-.term .c{color:#8A948C}
-.term .v{color:var(--viridian);font-weight:600}
+/* ---------- checkout ---------- */
+.checkout{padding:96px 0;text-align:center}
+.checkout p.big{max-width:54ch;margin:18px auto 0;font-size:19px;color:var(--ink-soft)}
+.checkout .cta{margin-top:34px;display:inline-block}
+footer{border-top:1px solid var(--line);padding:34px 0;font-size:14.5px;color:var(--ink-soft)}
+footer .wrap{display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px}
 
-/* ---------- footer ---------- */
-footer .wrap{padding-top:48px;padding-bottom:56px;display:flex;justify-content:space-between;gap:30px;flex-wrap:wrap;align-items:flex-start}
-footer .fbrand{font-family:var(--mono);font-size:13px;font-weight:600}
-footer p{font-size:13px;color:var(--ink-soft);max-width:52ch;margin-top:8px}
-footer a{color:var(--viridian)}
-.flinks{display:flex;gap:20px;font-family:var(--mono);font-size:13px}
-.flinks a{text-decoration:none;color:var(--ink-soft)}
-.flinks a:hover{color:var(--ink)}
-
-@media (max-width:900px){
-  .hero .wrap{grid-template-columns:1fr;padding-top:48px;padding-bottom:96px}
-  .compare,.steps,.truths,.uses-grid{grid-template-columns:1fr}
-  .col+.col{border-left:none;border-top:1.5px solid var(--ink)}
-  .step+.step{border-left:none;border-top:1.5px solid var(--ink)}
-  .step .arrow{display:none}
-  .setup .wrap{grid-template-columns:1fr}
-  .setup .wrap > *{min-width:0}
-  .bar nav a:not(.btn){display:none}
+@media (max-width:880px){
+  .hero .wrap{grid-template-columns:1fr;gap:48px}
+  .beats .grid,.compare .duo{grid-template-columns:1fr}
+  nav.top{display:none}
+  .hero{padding:56px 0 72px}
 }
 </style>
 </head>
@@ -228,387 +194,205 @@ footer a{color:var(--viridian)}
 
 <header>
   <div class="wrap bar">
-    <span class="brand"><span class="dot"></span>git-repo-auth-mcp</span>
-    <nav>
+    <div class="brand"><span class="bell" aria-hidden="true">🔔</span> Git Repo Auth</div>
+    <nav class="top" aria-label="Primary">
       <a href="#how">How it works</a>
-      <a href="#honest">Security model</a>
-      <a href="#pricing">Pricing</a>
-      <a href="#setup">Setup</a>
-      <a class="btn btn-sm" href="https://github.com/klappy/git-repo-auth-mcp" target="_blank" rel="noopener">GitHub ↗</a>
+      <a href="#safer">Why it's safer</a>
+      <a href="/#pricing">Pricing</a>
     </nav>
+    <a class="connect-sm" href="/start">Get set up</a>
   </div>
 </header>
 
 <section class="hero">
-  <div class="guilloche"></div>
   <div class="wrap">
     <div>
-      <p class="eyebrow">Credential issuance for AI agents</p>
-      <h1>Your AI can build things.<br><span class="accent">This lets it save them — safely.</span></h1>
-      <p class="lede">When you ask an AI to build something, that work has to live somewhere. Developers keep theirs on GitHub — but GitHub expects you to create and manage digital keys, and that's where most people give up.</p>
-      <p class="lede">This bridge handles the keys for you. Connect your GitHub account once. After that, every time your AI needs to save work, it gets a fresh key that opens only the one door it needs — and <strong>the key expires in an hour</strong>.</p>
-      <p class="lede">That's actually <em>safer</em> than what most professionals do. The common shortcut is one master key that opens everything and lasts for years. Here, there's no master key to lose — and if you ever want out, <strong>one click disconnects everything</strong>.</p>
-      <p class="lede">You never see a key. You never touch a key. You just ask, and it saves to GitHub.</p>
+      <p class="eyebrow">For people who build with AI</p>
+      <h1>Your AI can build things.
+        <span class="quiet">This lets it save them — safely.</span>
+      </h1>
+      <p class="lede">When you ask an AI to build something, that work has to live somewhere. Developers keep theirs on GitHub — but GitHub expects you to create and manage digital keys, and that's where most people give up. This handles the keys for you.</p>
       <div class="cta-row">
-        <a class="btn btn-primary" href="#setup">Connect your agent</a>
-        <a class="btn" href="#how">See the flow</a>
-      </div>
-      <div class="clone">
-        <code id="cloneCmd">https://gitauth.klappy.dev/mcp</code>
-        <button id="copyClone" aria-label="Copy MCP server URL">copy MCP URL</button>
+        <a class="cta" href="/start">Set up in five minutes</a>
+        <a class="tech-link" href="/under-the-hood">The technical version →</a>
       </div>
     </div>
 
-    <div class="pass-zone">
-      <div class="pass" id="pass" aria-label="Demonstration of an expiring access token">
-        <span class="perf" aria-hidden="true"></span><span class="perf r" aria-hidden="true"></span>
-        <div class="pass-head">
-          <span class="t1">Installation Token</span>
-          <span class="t2">git-repo-auth-mcp</span>
-        </div>
-        <div class="pass-body">
-          <div class="tok" id="tok"></div>
-          <div class="fields">
-            <div class="f"><label>Scope</label><div>contents: write</div></div>
-            <div class="f"><label>Repositories</label><div>klappy.dev</div></div>
-            <div class="f"><label>Issued by</label><div>oddkit-steward[bot]</div></div>
-            <div class="f"><label>Issued at</label><div id="issuedAt">—</div></div>
+    <div class="deskscene" aria-label="Animation: a key is made for one job, its hour runs out, and it expires on its own">
+      <div>
+        <div class="keycard">
+          <span class="stamp">Key issued</span>
+          <div class="row1">
+            <div class="who">Guest<br><b>Your AI</b></div>
+            <div class="dial" aria-hidden="true">
+              <svg viewBox="0 0 60 60"><circle class="track" cx="30" cy="30" r="26"/><circle class="left" cx="30" cy="30" r="26"/></svg>
+              <span class="mid">1 hr</span>
+            </div>
           </div>
-          <div class="ttl">
-            <div class="ttl-top"><span>Time to live</span><b id="ttlText">60:00</b></div>
-            <div class="ttl-bar"><div class="ttl-fill" id="ttlFill"></div></div>
-          </div>
-          <div class="stamp" aria-hidden="true">Expired</div>
+          <div class="token" aria-hidden="true">ghs_••••••••••••</div>
+          <div class="room"><small>Opens one door</small>your-project</div>
+          <div class="expired" aria-hidden="true"><span>Expired</span></div>
         </div>
-        <div class="pass-foot">
-          <span>NO ROTATION REQUIRED</span>
-          <span>EXPIRY IS THE ROTATION</span>
-        </div>
+        <p class="scenecap">made fresh → opens one door → expires on its own</p>
       </div>
-      <p class="demo-note">Live demonstration at 60× speed — a real token lives one hour.</p>
     </div>
   </div>
 </section>
 
-<section class="ledger">
+<section class="beats" id="how">
   <div class="wrap">
-    <p class="sec-label">The problem, on the record</p>
-    <h2>A personal access token is a key you can lose. This is a key that loses itself.</h2>
-    <div class="compare">
-      <div class="col bad">
-        <h3>Hand-minted PAT <span class="tag">Status quo</span></h3>
+    <p class="eyebrow">How it works</p>
+    <h2>You ask. The front desk handles the keys.</h2>
+    <div class="grid">
+      <div class="beat">
+        <div class="glyph" aria-hidden="true">🗣️</div>
+        <h3>You just ask</h3>
+        <p>"Save my project to GitHub." That's it. No setup screens, no settings to learn, nothing to copy and paste.</p>
+      </div>
+      <div class="beat">
+        <div class="glyph" aria-hidden="true">🔑</div>
+        <h3>A key is made for that one job</h3>
+        <p>Behind the scenes, your AI gets a fresh key that opens only the one door it needs — your project, nothing else.</p>
+      </div>
+      <div class="beat">
+        <div class="glyph" aria-hidden="true">⏳</div>
+        <h3>The key expires on its own</h3>
+        <p>Within the hour, the key stops working. There's nothing to remember, revoke, or worry about later.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="compare" id="safer">
+  <div class="wrap">
+    <p class="eyebrow">Why it's safer</p>
+    <h2>No master key to lose.</h2>
+    <div class="duo">
+      <div class="panel bad">
+        <span class="tag">The common shortcut</span>
+        <h3>One master key, kept for years</h3>
         <ul>
-          <li><span class="mk">✕</span>Lives for months. Pasted into chat transcripts, logs, and clipboards.</li>
-          <li><span class="mk">✕</span>One scope for everything — the agent fixing a typo holds the same key as the deploy.</li>
-          <li><span class="mk">✕</span>Rotation is a chore a human remembers to do. Or doesn't.</li>
-          <li><span class="mk">✕</span>Commits show up as <em>you</em>. The audit log can't tell your hands from the agent's.</li>
+          <li>Opens everything, not just the job at hand</li>
+          <li>Lasts a year or two — or forever</li>
+          <li>If it leaks, everything it opens is exposed</li>
+          <li>Someone has to remember to replace it</li>
         </ul>
       </div>
-      <div class="col good">
-        <h3>Minted on demand <span class="tag">This worker</span></h3>
+      <div class="panel good">
+        <span class="tag">How this works</span>
+        <h3>A fresh key for every job</h3>
         <ul>
-          <li><span class="mk">✓</span>Lives one hour, maximum. A leaked transcript holds a corpse, not a key.</li>
-          <li><span class="mk">✓</span>Down-scoped per request — name the repos, name the permissions.</li>
-          <li><span class="mk">✓</span>Rotation ceases to be a task. The token rotates by dying.</li>
-          <li><span class="mk">✓</span>Every commit is attributed to the App's bot identity. Provenance is built in.</li>
+          <li>Opens one door, for one task</li>
+          <li>Expires within the hour, every time</li>
+          <li>A leaked key dies before it matters</li>
+          <li>Expiry is automatic — nobody has to remember</li>
         </ul>
       </div>
     </div>
-  </div>
-</section>
-
-<section class="how" id="how">
-  <div class="wrap">
-    <p class="sec-label">How it works</p>
-    <h2>Three hops. Your key never moves.</h2>
-    <div class="steps">
-      <div class="step">
-        <span class="n">STEP 1</span>
-        <h3>You connect, once</h3>
-        <p>Add the MCP server to your client and log in with GitHub. The connection binds to <em>your</em> installation of the app — you choose which repos it covers. Then your agent calls <code>github_token</code> at need.</p>
-        <span class="arrow" aria-hidden="true">→</span>
-      </div>
-      <div class="step">
-        <span class="n">STEP 2</span>
-        <h3>The worker signs</h3>
-        <p>Your Cloudflare Worker signs a 10-minute JWT with your App's private key — which lives in worker secrets and never transits chat, disk, or transcript.</p>
-        <span class="arrow" aria-hidden="true">→</span>
-      </div>
-      <div class="step">
-        <span class="n">STEP 3</span>
-        <h3>GitHub issues the pass</h3>
-        <p>GitHub exchanges the JWT for a one-hour installation token, scoped exactly as requested. The agent uses it, and the clock does the rest.</p>
-      </div>
-    </div>
-  </div>
-</section>
-
-<section class="uses" id="uses">
-  <div class="wrap">
-    <p class="sec-label">No coding tool required</p>
-    <h2>Ship from the chat you're already in.</h2>
-    <div class="uses-grid">
-      <div class="use">
-        <h3>Don't leave the thread</h3>
-        <p>Claude, ChatGPT, any frontier model &mdash; the plain conversation, even from a phone. Append to a repo, cut a branch, open a pull request, <b>mid-conversation</b>. No tool switch, no lost context.</p>
-      </div>
-      <div class="use">
-        <h3>Your flow, not ours</h3>
-        <p>Write straight to main if that's how you roll. Or run strict protected branches with required CI, and let the assistant bridge you into that setup. <b>We don't determine your flow. We let you.</b></p>
-      </div>
-      <div class="use">
-        <h3>Tested, not theorized</h3>
-        <p>Blank repository to branch protection and a working CI pipeline, set up entirely inside a chat &mdash; with Opus, and again with ChatGPT. <b>Not their coding tools. The chat.</b> It works.</p>
-      </div>
-    </div>
-  </div>
-</section>
-
-<section class="honest" id="honest">
-  <div class="wrap">
-    <p class="sec-label">Read this before you trust it</p>
-    <h2>The security model, stated plainly.</h2>
-    <p class="intro">Most credential tools bury their threat model. This one leads with it — because the people who should deploy this are exactly the people who will ask.</p>
-    <div class="truths">
-      <div class="truth">
-        <h3>Your grant is the boundary</h3>
-        <p>Each connection is bound by OAuth to <b>one user, one installation</b> — a minted token physically cannot reach another account's repositories; GitHub enforces the walls. The worker stores no GitHub tokens, ever: its only state is its own hashed grants and your quota accounting.</p>
-      </div>
-      <div class="truth">
-        <h3>"No admin" ≠ "can't escalate"</h3>
-        <p>The recommended grant excludes Administration — but <b>Workflows write</b> means a token holder can modify CI, and CI runs with the repo's own credentials. That path is accepted, not eliminated: every CI change lands in PRs and audit logs under the bot identity. Don't want the trade? <b>Drop the Workflows permission.</b></p>
-      </div>
-      <div class="truth">
-        <h3>Blast radius, stated</h3>
-        <p>You never hand over a key — connecting means <b>installing a GitHub App on repos you choose</b>. If this bridge were compromised, exposure is minting over installed scopes, within the app's ceiling — never your account or credentials. Your kill switch is unilateral: <b>uninstall the app</b> and minting ends instantly. Want zero shared trust? <b>Self-host the same code.</b></p>
-      </div>
-    </div>
-    <p class="kill"><b>$</b> Reversal is two clicks. The riskiest credential in this system is the one it replaces.</p>
   </div>
 </section>
 
 <section class="pricing" id="pricing">
   <div class="wrap">
-    <p class="sec-label">The deal, stated plainly</p>
-    <h2>How big is your agentic concurrency?</h2>
-    <p style="margin-top:16px;font-size:16px;color:var(--ink-soft);max-width:62ch">Tokens live one hour, so tokens-per-window is how many agents can work your repos <b style="color:var(--ink)">at the same time</b>. Every tier is one human, no seats &mdash; <b style="color:var(--ink)">the team is your agents</b>, and the per-agent price falls as you climb. Every response shows <span class="mono">remaining</span> and <span class="mono">window_reset_at</span>, so the wall is never a surprise.</p>
-    <!-- Hero-number rule: the big figure is ALWAYS the per-month price.
-         Source of truth: governance/external/tiers.md — script re-renders
-         quotas AND prices from a live fetch of that doc; these cards are the
-         static mirror. -->
+    <p class="eyebrow">Pricing</p>
+    <h2>Pay for how many helpers work at once.</h2>
+    <p class="lede2">Every key lasts an hour, so the only question is how many of your AI helpers can hold a key at the same time. One human, no seats — the team is your AI. Try it free first; the trial is real work, not a demo.</p>
     <div class="tiers" id="tierCards">
       <div class="tier" data-tier="Free">
         <h3>Free</h3>
         <p class="price">$0</p>
-        <span class="per">one-time trial &mdash; no card</span>
+        <span class="per">one-time trial — no card</span>
         <ul>
-          <li><span class="mk">&#10003;</span><span>Bucket of <b data-slot="quota">50 mints</b>, total</span></li>
-          <li><span class="mk">&#10003;</span><span>No decay &mdash; a clean wall, then you decide</span></li>
+          <li><b data-slot="quota">50 keys</b> to genuinely try it</li>
+          <li>A clean stop, then you decide</li>
         </ul>
       </div>
       <div class="tier hot" data-tier="Solo">
         <h3>Solo</h3>
         <p class="price" data-slot="price">$1</p>
-        <span class="per">per month &mdash; $24 billed every 2 years</span>
+        <span class="per">per month — $24 billed every 2 years</span>
         <ul>
-          <li><span class="mk">&#10003;</span><span><b data-slot="quota">5</b> agents at once</span></li>
-          <li><span class="mk">&#10003;</span><span>All 5 in the first hour, or one an hour</span></li>
-          <li><span class="mk">&#10003;</span><span>$0.20 per agent slot</span></li>
+          <li><b data-slot="quota">5</b> helpers at once</li>
+          <li>Plenty for one person and their AI</li>
         </ul>
-        <a class="btn btn-primary btn-sm" style="margin-top:16px" href="/buy/solo" >Get Solo</a>
+        <a class="buy" href="/buy/solo">Get Solo</a>
       </div>
       <div class="tier" data-tier="Pro">
         <h3>Pro</h3>
         <p class="price" data-slot="price">$5</p>
-        <span class="per">per month &mdash; $60 billed yearly</span>
+        <span class="per">per month — $60 billed yearly</span>
         <ul>
-          <li><span class="mk">&#10003;</span><span><b data-slot="quota">30</b> agents at once</span></li>
-          <li><span class="mk">&#10003;</span><span>5x the price, <b>6x</b> the agents</span></li>
-          <li><span class="mk">&#10003;</span><span>$0.167 per agent slot</span></li>
+          <li><b data-slot="quota">30</b> helpers at once</li>
+          <li>For people who run several projects</li>
         </ul>
-        <a class="btn btn-primary btn-sm" style="margin-top:16px" href="/buy/pro" >Get Pro</a>
+        <a class="buy" href="/buy/pro">Get Pro</a>
       </div>
       <div class="tier" data-tier="Team">
         <h3>Team</h3>
         <p class="price" data-slot="price">$25</p>
         <span class="per">per month</span>
         <ul>
-          <li><span class="mk">&#10003;</span><span><b data-slot="quota">200</b> agents at once</span></li>
-          <li><span class="mk">&#10003;</span><span>A team of agents &mdash; one human, no seats</span></li>
-          <li><span class="mk">&#10003;</span><span>$0.125 per agent slot</span></li>
+          <li><b data-slot="quota">200</b> helpers at once</li>
+          <li>A whole crew — still one human, no seats</li>
         </ul>
-        <a class="btn btn-primary btn-sm" style="margin-top:16px" href="/buy/team" >Get Team</a>
+        <a class="buy" href="/buy/team">Get Team</a>
       </div>
       <div class="tier" data-tier="Fleet">
         <h3>Fleet</h3>
         <p class="price" data-slot="price">$100</p>
         <span class="per">per month</span>
         <ul>
-          <li><span class="mk">&#10003;</span><span><b data-slot="quota">1,000</b> agents at once</span></li>
-          <li><span class="mk">&#10003;</span><span>Never think about the window again</span></li>
-          <li><span class="mk">&#10003;</span><span>$0.10 per agent slot</span></li>
+          <li><b data-slot="quota">1,000</b> helpers at once</li>
+          <li>Never think about the limit again</li>
         </ul>
-        <a class="btn btn-primary btn-sm" style="margin-top:16px" href="/buy/fleet" >Get Fleet</a>
+        <a class="buy" href="/buy/fleet">Get Fleet</a>
       </div>
     </div>
-    <p class="kill" style="margin-top:22px"><b>$</b> Re-requesting the same scope while a token is live is always free. Prices and quotas render from <a href="https://github.com/klappy/git-repo-auth-mcp/blob/main/governance/external/tiers.md" target="_blank" rel="noopener">the governance document the server enforces</a>. Prefer your own keys? <a href="#setup">Self-host for $0, forever</a> &mdash; same code.</p>
+    <p class="source">These numbers render live from <a href="https://github.com/klappy/git-repo-auth-mcp/blob/main/governance/external/tiers.md" target="_blank" rel="noopener">the same rulebook the server enforces</a> — the page can't promise something the service doesn't keep. Prefer to run your own? <a href="/self-host">Self-host for $0</a> — same code.</p>
   </div>
 </section>
 
-<section class="setup" id="setup">
+<section class="checkout" id="connect">
   <div class="wrap">
-    <div class="left">
-      <p class="sec-label">Setup</p>
-      <h2>Connect in a minute. Or run your own.</h2>
-      <p><b>Use it:</b> add <span class="mono">https://gitauth.klappy.dev/mcp</span> to your MCP client and follow the GitHub login. <b>Operate it:</b> the script here is the self-host runbook — same code, your app, your worker. Details in the README.</p>
-      <p class="fine">Keep your existing PAT until <code>github_token</code> mints its first real token. Retiring the fallback before validating the replacement is how lockouts happen — the README sequences this for you.</p>
-    </div>
-    <div class="term">
-      <div class="term-head">
-        <span>setup.sh</span>
-        <button id="copySetup">copy</button>
-      </div>
-      <pre id="setupCode"><span class="c"># 1 — Create the GitHub App (Contents RW, PRs RW, Metadata R.</span>
-<span class="c">#     Workflows RW optional — see security model. No Administration.)</span>
-
-<span class="c"># 2 — GitHub ships PKCS#1; Workers WebCrypto wants PKCS#8:</span>
-openssl pkcs8 -topk8 -inform PEM \
-  -in your-app.private-key.pem -nocrypt -out app-pkcs8.pem
-
-<span class="c"># 3 — Enable user OAuth on the app: callback =</span>
-<span class="c">#     https://&lt;worker&gt;/callback, generate a client secret.</span>
-
-<span class="c"># 4 — Secrets (never committed, never pasted in chat):</span>
-<span class="v">wrangler</span> secret put GH_APP_ID
-<span class="v">wrangler</span> secret put GH_APP_PRIVATE_KEY
-<span class="v">wrangler</span> secret put GITHUB_CLIENT_ID
-<span class="v">wrangler</span> secret put GITHUB_CLIENT_SECRET
-
-<span class="c"># 5 — Ship it:</span>
-<span class="v">npm</span> install && <span class="v">npm</span> run deploy
-
-<span class="c"># 6 — Point any MCP client at https://&lt;worker&gt;/mcp —</span>
-<span class="c">#     OAuth + GitHub login happen in the browser.</span></pre>
-    </div>
+    <p class="eyebrow">Check out anytime</p>
+    <h2>One click disconnects everything.</h2>
+    <p class="big">You never see a key. You never touch a key. You just ask, and it saves to GitHub. And if you ever want out, removing the app ends it all — instantly.</p>
+    <a class="cta" href="/start">Set up in five minutes</a>
   </div>
 </section>
 
 <footer>
   <div class="wrap">
-    <div>
-      <p class="fbrand">git-repo-auth-mcp</p>
-      <p>Currently GitHub; forge-agnostic by design. Part of the <a href="https://klappy.dev" target="_blank" rel="noopener">klappy.dev</a> / oddkit ecosystem — governance-first tooling for human–AI collaboration. License decision pending; open an issue if you need clarity before then.</p>
-    </div>
-    <div class="flinks">
-      <a href="https://github.com/klappy/git-repo-auth-mcp" target="_blank" rel="noopener">Repository</a>
-      <a href="https://github.com/klappy/git-repo-auth-mcp#security-model--read-before-deploying" target="_blank" rel="noopener">Security model</a>
-      <a href="https://klappy.dev" target="_blank" rel="noopener">klappy.dev</a>
-    </div>
+    <span>Git Repo Auth · keys handled for you</span>
+    <span><a class="tech-link" href="/#pricing">Pricing</a> · <a class="tech-link" href="/under-the-hood">For developers: under the hood</a></span>
   </div>
 </footer>
 
 <script>
 (function(){
-  var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  // Legacy deep links from the old homepage live at /under-the-hood now
+  var h = location.hash.slice(1);
+  if (['setup','honest','uses','pass'].indexOf(h) > -1) location.replace('/under-the-hood#' + h);
 
-  // ----- expiring token demo (60x speed: 1 real second = 1 token minute) -----
-  var pass = document.getElementById('pass');
-  var tok = document.getElementById('tok');
-  var ttlText = document.getElementById('ttlText');
-  var ttlFill = document.getElementById('ttlFill');
-  var issuedAt = document.getElementById('issuedAt');
-  var TOTAL = 60; // demo seconds representing 60 minutes
-  var left = TOTAL, timer = null;
-
-  function randToken(){
-    var chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz0123456789';
-    var s = '';
-    for (var i=0;i<34;i++) s += chars[Math.floor(Math.random()*chars.length)];
-    return s;
-  }
-  function fmtNow(){
-    var d = new Date();
-    return d.toTimeString().slice(0,5) + ' UTC' ;
-  }
-  function renderToken(alive){
-    var t = randToken();
-    tok.innerHTML = '<span class="dim">ghs_</span>' + t.slice(0,12) + '<span class="dim">' + t.slice(12) + '</span>';
-  }
-  function setTTL(){
-    var m = String(left).padStart(2,'0');
-    ttlText.textContent = m + ':00';
-    ttlFill.style.width = (left/TOTAL*100) + '%';
-  }
-  function mint(){
-    pass.classList.remove('dead');
-    renderToken(true);
-    issuedAt.textContent = fmtNow();
-    left = TOTAL;
-    setTTL();
-  }
-  function tick(){
-    left--;
-    if (left <= 0){
-      left = 0; setTTL();
-      pass.classList.add('dead');
-      setTimeout(mint, 2200); // brief death, then a fresh mint — expiry is the rotation
-      return;
-    }
-    setTTL();
-    timer = setTimeout(tick, 1000);
-  }
-  mint();
-  if (reduceMotion){
-    // No live countdown animation; show a mid-life token statically.
-    left = 42; setTTL();
-  } else {
-    timer = setTimeout(tick, 1000);
-    // resume ticking after each remint
-    var obs = new MutationObserver(function(){
-      if (!pass.classList.contains('dead') && left === TOTAL){
-        clearTimeout(timer); timer = setTimeout(tick, 1000);
-      }
-    });
-    obs.observe(pass, {attributes:true, attributeFilter:['class']});
-  }
-
-  // ----- copy buttons -----
-  function wireCopy(btnId, getText){
-    var btn = document.getElementById(btnId);
-    btn.addEventListener('click', function(){
-      var text = getText();
-      navigator.clipboard.writeText(text).then(function(){
-        var prev = btn.textContent;
-        btn.textContent = 'copied';
-        setTimeout(function(){ btn.textContent = prev; }, 1600);
-      });
-    });
-  }
-  wireCopy('copyClone', function(){ return document.getElementById('cloneCmd').textContent; });
-  wireCopy('copySetup', function(){ return document.getElementById('setupCode').innerText; });
-
-  // ----- pricing cards: render from the governance doc the server enforces -----
-  // Static cards above are a mirror/fallback; tiers.md is the source of truth.
+  // Pricing: static cards are a mirror; tiers.md is the source of truth
   fetch('https://raw.githubusercontent.com/klappy/git-repo-auth-mcp/main/governance/external/tiers.md')
     .then(function(r){ return r.ok ? r.text() : Promise.reject(); })
     .then(function(md){
       var bucket = md.match(/bucket of \*\*(\d+) mints? total\*\*/i);
       var re = /^\|\s*(Solo|Pro|Team|Fleet)\s*\|\s*\*\*([\d,]+)\*\*\s*\|\s*([\d,]+)\s*\|\s*(\$[\d.]+)\/mo[^|]*\|/gim, m;
       var rows = {};
-      while ((m = re.exec(md))) rows[m[1]] = { quota: m[2], weekly: m[3], price: m[4] };
+      while ((m = re.exec(md))) rows[m[1]] = { quota: m[2], price: m[4] };
       if (bucket){
         var fq = document.querySelector('[data-tier="Free"] [data-slot="quota"]');
-        if (fq) fq.textContent = bucket[1] + ' mints';
+        if (fq) fq.textContent = bucket[1] + ' keys';
       }
       Object.keys(rows).forEach(function(name){
         var card = document.querySelector('[data-tier="' + name + '"]');
         if (!card) return;
         var p = card.querySelector('[data-slot="price"]');
         var q = card.querySelector('[data-slot="quota"]');
-        var w = card.querySelector('[data-slot="weekly"]');
         if (p) p.textContent = rows[name].price;
         if (q) q.textContent = rows[name].quota;
-        if (w) w.textContent = rows[name].weekly;
       });
     })
     .catch(function(){ /* mirror stands */ });
