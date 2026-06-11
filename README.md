@@ -1,5 +1,17 @@
 # Git Repo Auth MCP
 
+**Your AI can build things. This lets it save them — safely.**
+
+When you ask an AI to build something, that work has to live somewhere. Developers keep theirs on GitHub — but GitHub expects you to create and manage digital keys, and that's where most people give up.
+
+This bridge handles the keys for you. Connect your GitHub account once. After that, every time your AI needs to save work, it gets a fresh key that opens only the one door it needs — and the key expires in an hour.
+
+That's actually *safer* than what most professionals do. The common shortcut is one master key that opens everything and lasts for years. Here, there's no master key to lose — and if you ever want out, one click disconnects everything.
+
+You never see a key. You never touch a key. You just ask, and it saves to GitHub.
+
+## The technical version
+
 **Connect GitHub once. Your agent mints its own short-lived, scoped tokens after that.**
 
 A Cloudflare Worker that bridges MCP's OAuth to GitHub App installation tokens. Users click "Connect," log in with GitHub, and choose which account to bind. From then on, their MCP session can call one tool — `github_token` — which returns a ≤1-hour token scoped to *their* installation, optionally down-scoped per request.
