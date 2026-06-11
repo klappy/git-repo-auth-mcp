@@ -47,7 +47,7 @@ No resources or prompts. Annotation presence confirmed via `tools/list`. ⏳ Con
 
 ## Test account
 
-⏳ Operator-side: dedicated GitHub account, App installed on a populated scratch repo (files, a branch, an open PR), `quota:tier:{login}` set to `fleet`. Step-by-step instructions to accompany credentials: connect `https://gitauth.klappy.dev/mcp` → GitHub login → bind the test installation → call `github_token` bare (observe read-only) → call with write permissions → use the token for a git clone → ask the `docs` tool about "tiers". Every tool run end-to-end via MCP Inspector and as a live custom connector before submission.
+⏳ Operator-side: dedicated GitHub account + populated scratch repo (files, a branch, an open PR). The App is deliberately NOT pre-installed and no quota is pre-armed: the reviewer walks the real first-run path — the connect flow routes a zero-installation account to install the App in-band, and the free tier's 50-mint bucket is the designed first-run experience with ample review headroom. Full operator setup + reviewer walkthrough: `governance/internal/reviewer-test-account.md`. Recovery lever only (not pre-armed): reset `quota:bucket:{login}` if repeated rounds exhaust the bucket. Every tool run end-to-end via MCP Inspector and as a live custom connector before submission; the dry-run uninstalls the App afterward so the reviewer starts from zero.
 
 ## Launch readiness
 
