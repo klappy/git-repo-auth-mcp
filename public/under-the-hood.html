@@ -57,8 +57,8 @@ a{color:inherit}
 /* ---------- top bar ---------- */
 header{border-bottom:1.5px solid var(--ink);position:sticky;top:0;background:var(--paper);z-index:50}
 .bar{display:flex;align-items:center;justify-content:space-between;height:60px}
-.brand{font-family:var(--mono);font-weight:600;font-size:14px;letter-spacing:.04em;display:flex;align-items:center;gap:10px}
-.brand .dot{width:9px;height:9px;border-radius:50%;background:var(--viridian);display:inline-block}
+.brand{font-family:var(--mono);font-weight:600;font-size:14px;letter-spacing:.04em;display:flex;align-items:center;gap:10px;color:var(--ink);text-decoration:none}
+.brand .mark{width:20px;height:20px;border-radius:5px;display:block}
 .bar nav{display:flex;gap:22px;align-items:center;font-size:14px}
 .bar nav a{text-decoration:none;color:var(--ink-soft)}
 .bar nav a:hover{color:var(--ink)}
@@ -228,7 +228,7 @@ footer a{color:var(--viridian)}
 
 <header>
   <div class="wrap bar">
-    <span class="brand"><span class="dot"></span>git-repo-auth-mcp</span>
+    <a class="brand" href="/" aria-label="git-repo-auth-mcp — home"><img class="mark" src="/favicon.svg" alt="" width="20" height="20">git-repo-auth-mcp</a>
     <nav>
       <a href="#how">How it works</a>
       <a href="#honest">Security model</a>

@@ -48,9 +48,8 @@ header{position:sticky;top:0;background:color-mix(in srgb,var(--lobby) 88%,trans
   backdrop-filter:blur(8px);z-index:50;border-bottom:1px solid var(--line)}
 .bar{display:flex;align-items:center;justify-content:space-between;height:62px}
 .brand{display:flex;align-items:center;gap:10px;font-variation-settings:'wdth' 72,'wght' 700;
-  text-transform:uppercase;letter-spacing:.1em;font-size:13px}
-.brand .bell{width:22px;height:22px;border-radius:50%;background:var(--viridian);
-  display:grid;place-items:center;color:var(--lobby);font-size:11px}
+  text-transform:uppercase;letter-spacing:.1em;font-size:13px;color:var(--ink);text-decoration:none}
+.brand .mark{width:22px;height:22px;border-radius:6px;display:block}
 nav.top{display:flex;gap:26px;font-size:14px}
 nav.top a{text-decoration:none;color:var(--ink-soft)}
 nav.top a:hover{color:var(--ink)}
@@ -194,7 +193,7 @@ footer .wrap{display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px}
 
 <header>
   <div class="wrap bar">
-    <div class="brand"><span class="bell" aria-hidden="true">🔔</span> Git Repo Auth</div>
+    <a class="brand" href="/" aria-label="Git Repo Auth — home"><img class="mark" src="/favicon.svg" alt="" width="22" height="22"> Git Repo Auth</a>
     <nav class="top" aria-label="Primary">
       <a href="#how">How it works</a>
       <a href="#safer">Why it's safer</a>
