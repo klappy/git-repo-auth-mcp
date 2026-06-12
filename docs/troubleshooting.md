@@ -67,6 +67,20 @@ When an entry here graduates from "expected" to "observed," date it and link the
 
 ---
 
+## Upcoming: longer stateless installation tokens (~520 chars) — heads-up, not yet observed
+
+**What's changing.** GitHub has announced that App installation tokens will move to a new stateless format — still `ghs_`-prefixed, but potentially much longer (~520 characters). Per the announcement (see the GitHub Changelog at https://github.blog/changelog/), apps with hardcoded length assumptions may break; a per-request override header is offered for validating ahead of the rollout.
+
+**Why this bridge is expected to be unaffected (code audit, 2026-06-11).** The worker carries no format or length assumptions: no token regexes, no `.length` checks, no truncation anywhere in `src/`. The token is a pure pass-through from GitHub to the tool result (`src/mcp-api.ts`), and only its **expiry timestamp** is ever stored (`quota:tok` records, `src/quota.ts`) — the no-tokens-stored promise means there is nothing to overflow. Downstream usage formats (`x-access-token:<token>@` clone URLs, `Authorization: Bearer` headers) are length-agnostic.
+
+**The unverified seam.** `@octokit/auth-app` performs the token-creation call and caches tokens internally. It treats tokens as opaque strings and *should* be unaffected — but that is expectation, not observation. Verification path: inject GitHub's override header on the token-creation request (a temporary, env-flagged patch, since the call lives inside octokit), then run one mint and one clone against the forced new format.
+
+**Symptom if it ever bites.** Mints failing after GitHub's rollout with no code change on our side. Check `@octokit/auth-app` release notes before suspecting the worker.
+
+**Tripwires** (Bide verdict: `waiting`): GitHub announcing an enforcement date, or an `@octokit/auth-app` release referencing the new format. Either fires → run the override-header test above.
+
+---
+
 ## Adding entries
 
 When you hit and resolve a failure: record the observation in the project journal first (dated DOLCHEO entry under `odd/ledger/`), then distill it here — symptom as the heading, cause, fix, verification step, journal link. The journal is the evidence; this doc is the index into it.
