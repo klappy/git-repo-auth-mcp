@@ -82,13 +82,16 @@ h1 .quiet{display:block;color:var(--viridian);font-variation-settings:'wdth' 96,
   animation:lifecycle 12s ease-in-out infinite}
 .keycard .row1{display:flex;justify-content:space-between;align-items:flex-start}
 .keycard .idrow{display:flex;align-items:center;gap:12px}
-.keycard .cardmark{width:58px;height:58px;display:block;border-radius:12px}
-.keycard .chip{width:34px;height:26px;border-radius:6px;background:var(--amber);flex:none;
-  align-self:center;margin-right:10px;position:relative;overflow:hidden;
-  box-shadow:inset 0 0 0 1px rgba(8,50,42,.35)}
-.keycard .chip::before{content:'';position:absolute;inset:0;
-  background:linear-gradient(to right,transparent 31%,#244236 31%,#244236 36%,transparent 36%,transparent 64%,#244236 64%,#244236 69%,transparent 69%),
-             linear-gradient(to bottom,transparent 46%,#244236 46%,#244236 54%,transparent 54%)}
+.keycard .cardmark{width:52px;height:52px;display:block;border-radius:11px}
+.keycard .hardware{display:flex;align-items:center;gap:14px}
+.keycard .chip{width:42px;height:31px;border-radius:7px;flex:none;position:relative;overflow:hidden;
+  background:linear-gradient(135deg,#EFCE83 0%,#D9A441 38%,#B8842E 62%,#E8C271 100%);
+  box-shadow:inset 0 1px 1px rgba(255,245,220,.8),inset 0 -1px 2px rgba(95,62,15,.55),0 1px 2px rgba(8,50,42,.4)}
+.keycard .chip::before{content:'';position:absolute;inset:0;opacity:.55;
+  background:linear-gradient(to right,transparent 30%,#7A5A1E 30%,#7A5A1E 33%,transparent 33%,transparent 67%,#7A5A1E 67%,#7A5A1E 70%,transparent 70%),
+             linear-gradient(to bottom,transparent 47%,#7A5A1E 47%,#7A5A1E 53%,transparent 53%)}
+.keycard .chip::after{content:'';position:absolute;left:30%;right:30%;top:24%;bottom:24%;
+  border:1.5px solid rgba(122,90,30,.55);border-radius:4px}
 .keycard .who{font-variation-settings:'wdth' 70,'wght' 640;text-transform:uppercase;
   letter-spacing:.12em;font-size:11.5px;color:rgba(250,250,246,.72)}
 .keycard .who b{display:block;font-size:15px;color:#FAFAF6;letter-spacing:.02em;margin-top:3px;
@@ -99,7 +102,7 @@ h1 .quiet{display:block;color:var(--viridian);font-variation-settings:'wdth' 96,
 .keycard .room small{display:block;font-variation-settings:'wdth' 70,'wght' 600;font-size:11px;
   text-transform:uppercase;letter-spacing:.14em;color:rgba(250,250,246,.66);margin-bottom:2px}
 /* the hour dial — bow of the key is a clock */
-.dial{width:62px;height:62px;position:relative;flex:none}
+.dial{width:62px;height:62px;position:relative;flex:none;margin-right:34px}
 .dial svg{width:100%;height:100%;transform:rotate(-90deg)}
 .dial .track{fill:none;stroke:rgba(250,250,246,.18);stroke-width:7}
 .dial .left{fill:none;stroke:var(--amber);stroke-width:7;stroke-linecap:round;
@@ -230,14 +233,13 @@ footer .wrap{display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px}
         <div class="keycard">
           <span class="stamp">Key issued</span>
           <div class="row1">
-            <div class="idrow"><img class="cardmark" src="/favicon.svg" alt="" width="58" height="58"><div class="who">Guest<br><b>Your AI</b></div></div>
-            <span class="chip" aria-hidden="true"></span>
+            <div class="idrow"><img class="cardmark" src="/favicon.svg" alt="" width="52" height="52"><div class="who">Guest<br><b>Your AI</b></div></div>
             <div class="dial" aria-hidden="true">
               <svg viewBox="0 0 60 60"><circle class="track" cx="30" cy="30" r="26"/><circle class="left" cx="30" cy="30" r="26"/></svg>
               <span class="mid">1 hr</span>
             </div>
           </div>
-          <div class="token" aria-hidden="true">ghs_••••••••••••</div>
+          <div class="hardware" aria-hidden="true"><span class="chip"></span><span class="token">ghs_••••••••••••</span></div>
           <div class="room"><small>Opens one door</small>your-project</div>
           <div class="expired" aria-hidden="true"><span>Expired</span></div>
         </div>
