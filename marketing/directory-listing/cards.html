@@ -1,0 +1,164 @@
+<!doctype html><html><head><meta charset="utf-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--pine:#08322A;--viridian:#0E5A4A;--paper:#FAFAF6;--amber:#D9A441;--ink:#0E1311;--stamp:#B33A2B}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#222}
+.card{width:1600px;height:1000px;background:var(--pine);position:relative;overflow:hidden;
+  font-family:'Archivo',sans-serif;color:var(--paper);padding:84px 96px 76px;display:flex;flex-direction:column}
+.card .glow{position:absolute;inset:0;background:radial-gradient(1100px 650px at 76% 14%, rgba(14,90,74,.5), transparent 70%)}
+.frame{position:absolute;inset:32px;border:1px solid rgba(250,250,246,.22);
+  outline:1px solid rgba(250,250,246,.10);outline-offset:6px;pointer-events:none;border-radius:4px}
+.corner{position:absolute;width:26px;height:26px;border:2.5px solid var(--amber);z-index:2}
+.corner.tl{top:24px;left:24px;border-right:none;border-bottom:none}
+.corner.tr{top:24px;right:24px;border-left:none;border-bottom:none}
+.corner.bl{bottom:24px;left:24px;border-right:none;border-top:none}
+.corner.br{bottom:24px;right:24px;border-left:none;border-top:none}
+.head{display:flex;gap:64px;align-items:flex-start;position:relative;z-index:1}
+.head-text{flex:1;min-width:0}
+.eyebrow{font-family:'IBM Plex Mono',monospace;font-size:20px;letter-spacing:.24em;color:var(--amber);
+  text-transform:uppercase;display:flex;align-items:center;gap:18px}
+.eyebrow::after{content:"";flex:1;height:1px;background:linear-gradient(90deg,rgba(217,164,65,.55),transparent)}
+h1{font-size:70px;font-weight:800;font-stretch:112%;line-height:1.04;margin:20px 0 16px;letter-spacing:-.015em}
+.sub{font-size:27px;font-weight:400;color:rgba(250,250,246,.78);line-height:1.42;max-width:880px}
+.sealcol{width:300px;flex:none;display:flex;flex-direction:column;align-items:center;gap:20px}
+.ring{width:280px;height:280px;border-radius:50%;padding:10px;
+  background:conic-gradient(var(--amber) 0 78%, rgba(250,250,246,.14) 78% 100%);
+  box-shadow:0 26px 70px rgba(0,0,0,.45)}
+.ring-inner{width:100%;height:100%;border-radius:50%;overflow:hidden;border:6px solid var(--pine)}
+.ring-inner img{width:100%;height:100%;display:block;object-fit:cover;transform:scale(1.14)}
+.serial{font-family:'IBM Plex Mono',monospace;font-size:16px;letter-spacing:.16em;color:rgba(250,250,246,.6);
+  text-transform:uppercase;text-align:center;line-height:1.85}
+.serial b{color:var(--amber);font-weight:500}
+.spacer{flex:1}
+.panel{background:var(--paper);color:var(--ink);border-radius:10px;
+  padding:32px 44px;position:relative;z-index:1;box-shadow:0 24px 60px rgba(0,0,0,.4)}
+.pc{position:absolute;width:18px;height:18px;border:2px solid var(--viridian);opacity:.45}
+.pc.a{top:12px;left:12px;border-right:none;border-bottom:none}
+.pc.b{bottom:12px;right:12px;border-left:none;border-top:none}
+.ptitle{font-family:'IBM Plex Mono',monospace;font-size:18px;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--viridian);margin-bottom:16px;display:flex;align-items:center;gap:14px}
+.ptitle::after{content:"";flex:1;height:1px;background:#C7CCC9}
+pre{font-family:'IBM Plex Mono',monospace;font-size:24px;line-height:1.5;white-space:pre-wrap;color:var(--ink)}
+.k{color:var(--viridian);font-weight:600}.v{color:#5a4a18}.s{color:var(--stamp)}.dim{color:#7a807d}
+.footer{font-family:'IBM Plex Mono',monospace;font-size:18px;color:rgba(250,250,246,.55);
+  margin-top:24px;position:relative;z-index:1;display:flex;justify-content:space-between;letter-spacing:.06em}
+.tick{color:var(--amber)}
+</style></head><body>
+
+<!-- CARD 1 -->
+<div class="card" id="c1">
+  <div class="glow"></div><div class="frame"></div>
+  <div class="corner tl"></div><div class="corner tr"></div><div class="corner bl"></div><div class="corner br"></div>
+  <div class="head">
+    <div class="head-text">
+      <div class="eyebrow">Git Repo Auth · MCP</div>
+      <h1>Your agent mints its own GitHub credentials.</h1>
+      <p class="sub">Connect once. Every token after that is requested by the agent, scoped by GitHub, and dead within the hour. You never paste a PAT into a chat again.</p>
+    </div>
+    <div class="sealcol">
+      <div class="ring"><div class="ring-inner"><img src="icon-512.png" alt="Git Repo Auth"></div></div>
+      <div class="serial">Series 2026 · Nº 0001<br><b>Expires ≤ 1 hour</b><br>Scope: contents:read</div>
+    </div>
+  </div>
+  <div class="spacer"></div>
+  <div class="panel"><span class="pc a"></span><span class="pc b"></span>
+    <div class="ptitle">github_token · live response</div>
+<pre>{
+  <span class="k">"token"</span>: <span class="dim">"ghs_••••••••••••••••••••••••••••"</span>,
+  <span class="k">"expires_at"</span>: <span class="v">"2026-06-12T04:47:29Z"</span>,   <span class="dim">// ≤ 1 hour, always</span>
+  <span class="k">"permissions"</span>: { <span class="v">"contents": "read"</span>, <span class="v">"metadata": "read"</span> },
+  <span class="k">"quota"</span>: { <span class="v">"tier": "solo"</span>, <span class="v">"remaining": 2</span>, <span class="v">"cached": false</span> }
+}</pre>
+  </div>
+  <div class="footer"><span>gitauth.klappy.dev</span><span class="tick">expiry is the rotation ◷</span></div>
+</div>
+
+<!-- CARD 2 -->
+<div class="card" id="c2">
+  <div class="glow"></div><div class="frame"></div>
+  <div class="corner tl"></div><div class="corner tr"></div><div class="corner bl"></div><div class="corner br"></div>
+  <div class="head">
+    <div class="head-text">
+      <div class="eyebrow">Secure by default</div>
+      <h1>Read-only until your agent asks for more — by name.</h1>
+      <p class="sub">A bare request mints read access. Write is granted per call, per scope, never by default. GitHub itself refuses everything else.</p>
+    </div>
+    <div class="sealcol">
+      <div class="ring"><div class="ring-inner"><img src="icon-512.png" alt="Git Repo Auth"></div></div>
+      <div class="serial">Series 2026 · Nº 0001<br><b>Write: not granted</b><br>Signed: git-repo-auth[bot]</div>
+    </div>
+  </div>
+  <div class="spacer"></div>
+  <div class="panel"><span class="pc a"></span><span class="pc b"></span>
+    <div class="ptitle">read token meets a push · GitHub's answer</div>
+<pre>$ git push origin feature-branch
+<span class="s">remote: Permission to klappy/git-repo-auth-mcp.git denied
+        to git-repo-auth[bot].</span>
+<span class="s">fatal: The requested URL returned error: 403</span>
+
+<span class="dim"># The default protecting you — and naming the bot identity
+# that signs every action your agents take.</span></pre>
+  </div>
+  <div class="footer"><span>gitauth.klappy.dev</span><span class="tick">the denial is the receipt ◷</span></div>
+</div>
+
+<!-- CARD 3 -->
+<div class="card" id="c3">
+  <div class="glow"></div><div class="frame"></div>
+  <div class="corner tl"></div><div class="corner tr"></div><div class="corner bl"></div><div class="corner br"></div>
+  <div class="head">
+    <div class="head-text">
+      <div class="eyebrow">Quota transparency</div>
+      <h1>Every response carries its own accounting.</h1>
+      <p class="sub">Tier, remaining mints, window reset — in every reply. Re-requesting a live scope is cached and free. Pricing renders from the same rulebook the server enforces.</p>
+    </div>
+    <div class="sealcol">
+      <div class="ring"><div class="ring-inner"><img src="icon-512.png" alt="Git Repo Auth"></div></div>
+      <div class="serial">Series 2026 · Re-mint<br><b>Cached: true · Cost: 0</b><br>Source: governance live</div>
+    </div>
+  </div>
+  <div class="spacer"></div>
+  <div class="panel"><span class="pc a"></span><span class="pc b"></span>
+    <div class="ptitle">same scope, same hour · second request</div>
+<pre>{
+  <span class="k">"quota"</span>: {
+    <span class="k">"tier"</span>: <span class="v">"free"</span>,
+    <span class="k">"remaining"</span>: <span class="v">47</span>,          <span class="dim">// one-time bucket of 50, no expiry</span>
+    <span class="k">"cached"</span>: <span class="v">true</span>,           <span class="dim">// live token re-served — costs nothing</span>
+    <span class="k">"governance_source"</span>: <span class="v">"live"</span>
+  }
+}</pre>
+  </div>
+  <div class="footer"><span>gitauth.klappy.dev/#pricing</span><span class="tick">free: 50 mints, no card ◷</span></div>
+</div>
+
+<!-- CARD 4 -->
+<div class="card" id="c4">
+  <div class="glow"></div><div class="frame"></div>
+  <div class="corner tl"></div><div class="corner tr"></div><div class="corner bl"></div><div class="corner br"></div>
+  <div class="head">
+    <div class="head-text">
+      <div class="eyebrow">The kill switch is yours</div>
+      <h1>Uninstall the app. Everything stops. We're not involved.</h1>
+      <p class="sub">No tokens are ever stored — minted credentials die within the hour on their own. Removing the GitHub App ends all minting instantly, enforced by GitHub.</p>
+    </div>
+    <div class="sealcol">
+      <div class="ring"><div class="ring-inner"><img src="icon-512.png" alt="Git Repo Auth"></div></div>
+      <div class="serial">Series 2026 · Revocation<br><b>Enforced by GitHub</b><br>Operator: not required</div>
+    </div>
+  </div>
+  <div class="spacer"></div>
+  <div class="panel"><span class="pc a"></span><span class="pc b"></span>
+    <div class="ptitle">what GitHub enforces · every wall</div>
+<pre><span class="k">permission ceiling</span>   <span class="dim">→</span> the App grant you installed
+<span class="k">repository scope</span>     <span class="dim">→</span> only the repos you selected
+<span class="k">expiry</span>               <span class="dim">→</span> ≤ 1 hour, no exceptions
+<span class="k">audit trail</span>          <span class="dim">→</span> every action signed git-repo-auth[bot]
+<span class="k">kill switch</span>          <span class="dim">→</span> one click: Settings → Uninstall</pre>
+  </div>
+  <div class="footer"><span>gitauth.klappy.dev/security</span><span class="tick">GitHub enforces every wall ◷</span></div>
+</div>
+
+</body></html>
