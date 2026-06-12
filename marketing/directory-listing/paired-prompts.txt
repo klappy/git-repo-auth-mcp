@@ -1,24 +1,30 @@
 Git Repo Auth — Promotional Images: Paired Prompts
 ====================================================
 
-Each card visualizes real output from the connector, captured during
-pre-submission validation against production (v0.3.0). The prompt that
-produces each output in Claude:
+You never ask for a token. You ask for an outcome; Claude mints the
+right credential automatically — read-only by default, write only when
+the task needs it, every token dead within the hour. Each card shows
+what happened under the hood when a user asked for ordinary things.
+All output is real, captured during pre-submission validation against
+production (v0.3.0).
 
-card-1.png — "Call github_token with no arguments and show me the response."
-  (Bare mint: read-only default, ≤1h expiry, quota block in every reply.)
+card-1.png — "Take a look at my repo and tell me what needs attention."
+  Under the hood: Claude mints a read-only token automatically — no
+  scope requested, none needed. ≤1-hour expiry and the quota accounting
+  arrive in the same reply.
 
-card-2.png — "Use that token to push my branch."
-  (GitHub refuses the read-only token with a 403 naming git-repo-auth[bot] —
-  the secure default and the audit identity, demonstrated by a denial.)
+card-2.png — "Wait — what could a leaked token actually do?"
+  The answer, demonstrated: the default token cannot push. GitHub
+  refuses with a 403 that names the bot identity. The denial is the
+  receipt.
 
-card-3.png — "Mint the same scope again — what does that cost me?"
-  (Same-scope re-request within a live token's lifetime: cached, free,
-  reported truthfully in the quota block.)
+card-3.png — "While you're in there, summarize the open PR too."
+  Under the hood: the second task reuses the live token — cached, zero
+  quota cost, reported truthfully in the response.
 
-card-4.png — "What happens if I uninstall the GitHub App?"
-  (The kill switch: all minting stops instantly, enforced by GitHub.
-  The card enumerates every wall GitHub enforces.)
+card-4.png — "How do I shut this off completely, without asking anyone?"
+  The answer: uninstall the GitHub App. Minting stops instantly,
+  enforced by GitHub — the operator isn't in the loop.
 
 All cards: 1600×1000 PNG, brand palette (pine #08322A, viridian #0E5A4A,
 paper #FAFAF6, amber #D9A441), Archivo + IBM Plex Mono.
