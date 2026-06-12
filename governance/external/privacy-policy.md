@@ -2,7 +2,7 @@
 
 *Operator-approved 2026-06-10. Serving route and docs-tool registration land in the docs-page task.*
 
-*Effective: 2026-06-10. This policy covers the hosted Git Repo Auth MCP service. If you self-host the same code, you are the operator and this policy does not apply to your instance.*
+*Effective: 2026-06-10. This policy covers the hosted Git Repo Auth MCP service, operated by **Covenynt Ventures LLC** (https://covenynt.com) — the entity that collects and controls the data described below. If you self-host the same code, you are the operator and this policy does not apply to your instance.*
 
 ## What this service does
 
@@ -52,6 +52,7 @@ We do not sell or share your data with anyone else.
 
 ## Contact
 
+- Operator: Covenynt Ventures LLC — https://covenynt.com
 - Email: support@klappy.dev
 - Issues: https://github.com/klappy/git-repo-auth-mcp/issues
 

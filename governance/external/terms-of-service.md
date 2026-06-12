@@ -2,7 +2,7 @@
 
 *Operator-approved 2026-06-10. Serving route and docs-tool registration land in the docs-page task.*
 
-*Effective: 2026-06-10. By connecting to the hosted Git Repo Auth MCP service, you agree to these terms. If you self-host the code, these terms do not apply to your instance.*
+*Effective: 2026-06-10. The hosted Git Repo Auth MCP service is operated by **Covenynt Ventures LLC** (https://covenynt.com), and this agreement is between you and Covenynt Ventures LLC. By connecting to the hosted service, you agree to these terms. If you self-host the code, these terms do not apply to your instance.*
 
 ## 1. The service
 
@@ -17,7 +17,7 @@ Git Repo Auth MCP mints short-lived, scoped GitHub App installation tokens on be
 ## 3. Tiers, billing, and quotas
 
 - Tier limits and pricing are published at [tiers documentation URL] and served verbatim by the service's `docs` tool. The published document is authoritative; if service behavior and the document disagree, the document wins and the behavior is a bug.
-- Paid tiers are billed via Stripe at the cadence stated per tier (Solo: $24 per two years; Pro: $60 per year; Team and Fleet: monthly). You may cancel anytime; access continues to period end.
+- Paid tiers are billed via Stripe by Covenynt Ventures LLC; charges appear on your statement under the Covenynt Ventures name. Billing is at the cadence stated per tier (Solo: $24 per two years; Pro: $60 per year; Team and Fleet: monthly). You may cancel anytime; access continues to period end.
 - **Upgrades are prorated and immediate.** Switch to a higher tier at any time; the unused remainder of what you already paid is credited toward the new tier, so you never pay twice for the same days. Downgrades take effect at the end of the current period.
 - **Refunds: none.** Subscriptions are cancel-anytime; access continues to the end of the paid period, and no partial or pro-rated refunds are issued. Try the free tier's 50 mints before paying — it exists so you can know what you're buying.
 - The free tier is a one-time bucket of 50 mints with no expiry.

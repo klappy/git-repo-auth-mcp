@@ -17,6 +17,7 @@ You don't have to run anything. The hosted bridge is live:
 - **New to all this?** Start here: https://gitauth.klappy.dev/start — connected in about a minute, no card for the trial.
 - **Developer?** The fast path: https://gitauth.klappy.dev/start-developers
 - **The deal:** a real free trial, then plans from $1/month. Pricing and limits render live from [the same rulebook the server enforces](https://gitauth.klappy.dev/#pricing).
+- **Who you're dealing with:** the hosted service is operated by [Covenynt Ventures LLC](https://covenynt.com) — that's the name on Stripe receipts and in the [terms](https://gitauth.klappy.dev/terms).
 - **Rather hold your own keys?** https://gitauth.klappy.dev/self-host — same code as this repo, $0 forever.
 
 ## The technical version
