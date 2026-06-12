@@ -133,3 +133,52 @@ describe("failed mints are free (charge at check, refund on failure)", () => {
     expect(store.get("quota:bucket:someone")).toBe("100"); // capped, not 101
   });
 });
+
+describe("pages stay in sync with governance (thin sync contract)", () => {
+  const indexHtml = readFileSync("public/index.html", "utf8");
+  const uthHtml = readFileSync("public/under-the-hood.html", "utf8");
+
+  // Copies of the inline hydrator regexes in public/index.html and
+  // public/under-the-hood.html (each carries a pointer comment back here).
+  // They are cousins of parseTiersDoc, not the same code — they also parse
+  // price — and the pages fail SOFT (catch -> static mirror stands), so
+  // without this test a doc reshape that breaks them is invisible.
+  const PAGE_ROW_RE = /^\|\s*(Solo|Pro|Team|Fleet)\s*\|\s*\*\*([\d,]+)\*\*\s*\|\s*([\d,]+)\s*\|\s*(\$[\d.]+)\/mo[^|]*\|/gim;
+  const PAGE_BUCKET_RE = /bucket of \*\*(\d+) mints? total\*\*/i;
+
+  it("the pages' hydrator regex extracts every tier and the bucket from the doc", () => {
+    const re = new RegExp(PAGE_ROW_RE.source, PAGE_ROW_RE.flags);
+    const found: string[] = [];
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(tiersDoc))) found.push(m[1]);
+    expect(found.sort()).toEqual(["Fleet", "Pro", "Solo", "Team"]);
+    expect(tiersDoc).toMatch(PAGE_BUCKET_RE);
+  });
+
+  it("static pricing mirrors on both pages match the doc-derived agent counts", () => {
+    const perAgent = /two per agent/i.test(tiersDoc) ? 2 : 1;
+    const re = new RegExp(PAGE_ROW_RE.source, PAGE_ROW_RE.flags);
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(tiersDoc))) {
+      const tier = m[1];
+      const agents = (Number(m[2].replace(/,/g, "")) / perAgent).toLocaleString("en-US");
+      for (const [name, html] of [
+        ["index.html", indexHtml],
+        ["under-the-hood.html", uthHtml],
+      ] as const) {
+        const card = html.match(
+          new RegExp('data-tier="' + tier + '"[\\s\\S]*?data-slot="quota">([\\d,]+)<')
+        );
+        expect(card, `${tier} card with a quota slot in ${name}`).toBeTruthy();
+        expect(card![1], `${tier} static mirror in ${name}`).toBe(agents);
+      }
+    }
+    const bucket = tiersDoc.match(PAGE_BUCKET_RE)![1];
+    expect(indexHtml, "free bucket mirror in index.html").toContain(
+      `data-slot="quota">${bucket} keys`
+    );
+    expect(uthHtml, "free bucket mirror in under-the-hood.html").toContain(
+      `data-slot="quota">${bucket} mints`
+    );
+  });
+});
