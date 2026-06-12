@@ -34,8 +34,11 @@ N/A — the server returns URLs as text in tool results; it does not use `ui/ope
 |---|---|---|
 | `github_token` | Mint GitHub token | readOnlyHint: false, destructiveHint: false, openWorldHint: true |
 | `docs` | Service documentation | readOnlyHint: true, idempotentHint: true |
+| `admin_stats` | Operator stats | readOnlyHint: true, idempotentHint: false, openWorldHint: true |
 
-No resources or prompts. Annotation presence confirmed via `tools/list`. ⏳ Confirm against deployed candidate post-merge.
+`admin_stats` is operator-gated observability (aggregates only — connected/active/paid counts cross-checked against Stripe; no per-user data): it is registered solely when the bound login matches `OPERATOR_LOGIN` (`src/mcp-api.ts`, `isOperator()`), so it never appears on user connections, including the reviewer's. Disclosed because the source is public and the form asks for all tools.
+
+No resources or prompts. Annotation presence confirmed **on the wire** 2026-06-11: `tools/list` against production (`git-repo-auth-mcp 0.3.0` at https://gitauth.klappy.dev/mcp, fresh OAuth grant) returned `title` + annotation blocks for all tools as tabled above.
 
 ## Documentation & support
 
@@ -52,7 +55,7 @@ No resources or prompts. Annotation presence confirmed via `tools/list`. ⏳ Con
 ## Launch readiness
 
 - **GA date:** ⏳ operator sets.
-- **Surfaces tested:** ⏳ Claude.ai web, Claude Desktop, Claude mobile — run post-merge against the deployed candidate; record pass/fail per surface.
+- **Surfaces tested:** Claude iOS, Claude iPadOS, Claude.ai web, Claude Desktop — all pass (operator-run, 2026-06-11, against production v0.3.0; iOS run included the full reviewer walkthrough: in-band App install routing, bare read-only mint, clone, explicit write mint, docs tool).
 
 ## Branding
 
