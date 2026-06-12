@@ -10,6 +10,15 @@ That's actually *safer* than what most professionals do. The common shortcut is 
 
 You never see a key. You never touch a key. You just ask, and it saves to GitHub.
 
+## Want this with nearly zero effort?
+
+You don't have to run anything. The hosted bridge is live:
+
+- **New to all this?** Start here: https://gitauth.klappy.dev/start — connected in about a minute, no card for the trial.
+- **Developer?** The fast path: https://gitauth.klappy.dev/start-developers
+- **The deal:** a real free trial, then plans from $1/month. Pricing and limits render live from [the same rulebook the server enforces](https://gitauth.klappy.dev/#pricing).
+- **Rather hold your own keys?** https://gitauth.klappy.dev/self-host — same code as this repo, $0 forever.
+
 ## The technical version
 
 **Connect GitHub once. Your agent mints its own short-lived, scoped tokens after that.**
@@ -39,11 +48,13 @@ A Cloudflare Worker that bridges MCP's OAuth to GitHub App installation tokens. 
 
 ## Connect (as a user)
 
-Add this server to your MCP client:
+Add this server to your MCP client — the hosted bridge endpoint is:
 
 ```
-https://<deployment>/mcp
+https://gitauth.klappy.dev/mcp
 ```
+
+(Self-hosting? Substitute your own deployment's `/mcp`.)
 
 Your client will walk you through GitHub login and installation binding. Then ask your agent to call `github_token` when it needs git or API access.
 

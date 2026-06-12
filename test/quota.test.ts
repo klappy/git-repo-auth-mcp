@@ -181,4 +181,13 @@ describe("pages stay in sync with governance (thin sync contract)", () => {
       `data-slot="quota">${bucket} mints`
     );
   });
+
+  it("the README's restated price matches Solo's price in the doc", () => {
+    const readme = readFileSync("README.md", "utf8");
+    const restated = readme.match(/plans from \$([\d.]+)\/month/);
+    expect(restated, "README funnel price").toBeTruthy();
+    const soloRow = tiersDoc.match(/^\|\s*Solo\s*\|[^|]*\|[^|]*\|\s*\$([\d.]+)\/mo/im);
+    expect(soloRow, "Solo price in tiers.md").toBeTruthy();
+    expect(restated![1], "README price vs doc").toBe(soloRow![1]);
+  });
 });
