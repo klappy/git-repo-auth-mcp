@@ -14,9 +14,12 @@ card-1.png — "Take a look at my repo and tell me what needs attention."
   arrive in the same reply.
 
 card-2.png — "Wait — what could a leaked token actually do?"
-  The answer, demonstrated: the default token cannot push. GitHub
-  refuses with a 403 that names the bot identity. The denial is the
-  receipt.
+  The answer, demonstrated: the default token cannot push. In practice
+  your agent never hits this wall — it mints write scope when a task
+  genuinely needs it (and self-corrects when it guesses wrong). The
+  403 greets whatever can't ask properly: a leaked token, an injected
+  instruction. Every refusal names the bot identity. The denial is
+  the receipt.
 
 card-3.png — "While you're in there, summarize the open PR too."
   Under the hood: the second task reuses the live token — cached, zero
