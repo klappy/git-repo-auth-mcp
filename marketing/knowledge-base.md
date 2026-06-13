@@ -95,7 +95,7 @@ Every tier budgets two tokens per agent — a read-only token to look, a write t
 4. **The demo beat — the denial:** try to push with it. GitHub refuses with a 403 *naming the bot identity*. The security model demonstrates itself.
 5. **The demo beat — the write:** ask again, by name: contents write, pull_requests write. The commit lands signed `git-repo-auth[bot]` — auditable provenance.
 6. **The trust story:** the service stores no tokens, holds no power GitHub doesn't delegate, and the kill switch (uninstall) belongs entirely to the user.
-7. **The breadth proof:** one server, zero per-surface work, runs everywhere Claude does — phone, web, desktop, Claude Code, Cowork. This entire product was submitted to the directory *from a phone*, using its own minted tokens to push its own commits.
+7. **The breadth proof:** one server, zero per-surface work, runs everywhere Claude does — phone, web, desktop, Claude Code, Cowork. This entire product was built and submitted without a laptop — shipped from a phone most days, with an iPad for the submission form — using its own minted tokens to push its own commits.
 8. **The honest economics:** real free tier (50 mints, no card), plans from $1/month, prorated upgrades, no refunds because you can try before you pay, and $0 self-hosting of the same open code.
 
 # 9. Entity & Links

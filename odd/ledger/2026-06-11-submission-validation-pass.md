@@ -48,7 +48,7 @@ All four "Open before form-fill" items above closed by the operator: zero state 
 
 ### Learnings
 
-**[L] The manual OAuth dance is a phone-only MCP Inspector substitute.** DCR-register a throwaway client → PKCE pair → hand the operator the `/authorize` URL → operator authenticates in their own browser (credentials never touch the chat) → operator pastes back the single-use redirect URL → exchange with the held verifier → raw `initialize`/`tools/list`/`tools/call`. Used twice this session (annotation wire-check, tool-exercise pass), both from an iOS-only operator position. Revoke the grant when done. This belongs in the future method doc: directory validation has zero desktop dependency.
+**[L] The manual OAuth dance is a phone-only MCP Inspector substitute.** DCR-register a throwaway client → PKCE pair → hand the operator the `/authorize` URL → operator authenticates in their own browser (credentials never touch the chat) → operator pastes back the single-use redirect URL → exchange with the held verifier → raw `initialize`/`tools/list`/`tools/call`. Used twice this session (annotation wire-check, tool-exercise pass), both from a mobile-only operator position (iPadOS; the operator ships from a phone most days and uses no laptop — correction recorded 2026-06-12, the operator initially said iOS). Revoke the grant when done. This belongs in the future method doc: directory validation has zero desktop dependency — phone or tablet suffices.
 
 **[L] "Client view" is never evidence about the wire.** Restated from the main entry because the method depends on it: every requirement phrased as "confirm X via tools/list" must be discharged at protocol level, not from any client's rendering.
 
