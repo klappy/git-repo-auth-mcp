@@ -11,6 +11,7 @@ import bundledGettingStarted from "../governance/external/getting-started.md";
 import bundledPrivacy from "../governance/external/privacy-policy.md";
 import bundledTerms from "../governance/external/terms-of-service.md";
 import bundledStance from "../governance/external/prompt-injection-stance.md";
+import bundledIdentity from "../governance/external/identity-and-attribution.md";
 import { rankByQuery } from "./match";
 import type { Env } from "./types";
 
@@ -35,6 +36,10 @@ const DOCS: Record<string, { bundled: string; about: string }> = {
   "prompt-injection-stance.md": {
     bundled: bundledStance,
     about: "security, prompt injection, threat model, read-only default, kill switch",
+  },
+  "identity-and-attribution.md": {
+    bundled: bundledIdentity,
+    about: "commit attribution, PR authorship, co-authors, assign/review/mention, putting the operator on the work",
   },
 };
 
