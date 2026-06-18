@@ -1,17 +1,16 @@
 # Identity & Attribution — Putting the Operator on the Work
 
-*Drafted 2026-06-18. Served via the `docs` tool once merged.*
+*Drafted 2026-06-18. Served via the `docs` tool.*
 
 Commits and pull requests an agent creates with a minted token are attributed two different ways, by two different mechanisms. Confusing them is what makes "everything shows up as the bot" feel unfixable. Pulled apart, most of it is fixable today, with the token you already hold and nothing stored.
 
 - **Commit attribution** is by **email**. GitHub matches a commit's author/committer email to a user account. The token that pushed it is irrelevant to whose avatar appears on the commit.
 - **PR authorship** ("opened by") is by **token identity**. An installation token opens PRs as the App's `[bot]` user. No email trick changes that line — it is a property of the token type.
-
-So: commit credit is yours for the taking; PR "opened by" stays the bot unless a human clicks once. Here is how to get the operator onto the work without minting anything different and without storing a credential.
+- **PR findability** (whether the operator sees it in their GitHub lists) is by **participation** — assignee, mention, requested reviewer. It is *not* affected by who authored the commits.
 
 ## Commits in the operator's name
 
-GitHub attributes a commit to an account when the author email is one the account owns — including its **no-reply address**, which always has the form:
+GitHub attributes a commit to an account when the author email is one the account owns — including its **no-reply address**:
 
 ```
 {user_id}+{login}@users.noreply.github.com
@@ -30,50 +29,52 @@ GIT_COMMITTER_NAME="{login}"
 GIT_COMMITTER_EMAIL="{id}+{login}@users.noreply.github.com"
 ```
 
-The commit now lands on the operator's profile and contribution graph, their avatar on every line — using only the installation token. Nothing is stored, no promise is bent. (The agent that pushed remains the *pusher* in the repo's event log, which is honest and separate from authorship.)
+The commit now lands on the operator's profile and contribution graph using only the installation token. Nothing is stored, no promise is bent. The agent that pushed remains the *pusher* in the event log — honest and separate from authorship.
 
-If you don't know the operator's `{login}`, ask once and reuse it for the session. The numeric id you resolve yourself.
+## Co-authors — credit, not findability
 
-## Co-authors — sharing the credit honestly
-
-When the bot did the work and the operator directed it — or two parties collaborated — record both with a trailer. Leave one blank line, then:
+To share credit, add a trailer (one blank line, then):
 
 ```
 Co-authored-by: {login} <{id}+{login}@users.noreply.github.com>
 ```
 
-Trailers attribute on the contribution graph but are **not** a PR-visibility signal — they don't put the PR in anyone's filters. Use them for credit, not for surfacing.
+Trailers attribute on the contribution graph. They are **not** a findability signal — a co-authored PR does **not** appear in the operator's filters because of the trailer. Use them for credit only.
 
-## Make the PR visible to the operator
+## Make the PR findable — assign first
 
-This is the lever that actually solves "GitHub never shows me PRs the agent opened." GitHub's PR/issue filters key on participation, not authorship. After opening the PR, do all three — each feeds a different filter:
+GitHub's PR/issue filters key on participation. The levers, ranked by cost to the operator:
 
-```
-POST /repos/{owner}/{repo}/issues/{number}/assignees      {"assignees":["{login}"]}    -> "Assigned"
-POST /repos/{owner}/{repo}/pulls/{number}/requested_reviewers  {"reviewers":["{login}"]} -> "Review requests"
-```
+- **Assign the operator** — primary lever, zero obligation. Puts the PR in their **Assigned** filter and rolls into **Involved**. An assignment is a pin, not a task to clear.
+  ```
+  POST /repos/{owner}/{repo}/issues/{number}/assignees   {"assignees":["{login}"]}
+  ```
+- **`@`-mention in the body** — *optional*. Adds the **Mentioned** filter plus a notification. Use when you want to actively ping, not just surface.
+- **Request review** — *opt-in only*. Adds **Review requests** **and** creates a review obligation the operator must act on. Do **not** do this by default; only when you actually want them to review.
+  ```
+  POST /repos/{owner}/{repo}/pulls/{number}/requested_reviewers   {"reviewers":["{login}"]}
+  ```
 
-…and `@{login}` in the PR body — feeds "Mentioned". All three also roll up into the "Involved" filter, so the PR stops being invisible the moment it exists. (Request review from the operator only when they're a collaborator on the repo and not the PR author; the bot is the author here, so the operator is eligible.)
+Default to **assign alone** (+ mention if you want to ping). Assignment alone is enough to make the PR findable with no extra work for the operator.
 
-## What stays the bot — and the honest workaround
+## PR authorship stays the bot — what that means for review bots
 
-The PR's "opened by" line stays `[bot]`, because the installation token carries the bot identity and that is the only token this service mints without holding a credential past login. Two consequences to be straight about:
+The "opened by" line stays `[bot]` — installation-token physics. Whether a review bot will touch a bot-authored PR depends on the plan. For **Cursor Bugbot** specifically (verified June 2026):
 
-- **Verification.** A commit authored as the operator's no-reply but pushed with the installation token shows their identity; whether it carries a "Verified" badge depends on how it was created and is not guaranteed. Attribution and signature verification are separate things.
-- **Author-matched tooling.** Review bots on individual plans (e.g. some configurations of Cursor Bugbot) trigger on the *PR author*. A bot-authored PR may not wake them no matter how the commits are attributed or who is assigned. Assignment fixes *your* visibility; it does not change the author the bot sees.
+- **Individual plan:** Bugbot runs *only on PRs you author*. A bot-authored PR never auto-triggers — `bugbot run` on it no-ops. To get a review, use the **one-click handoff**: the agent pushes the branch and hands back
+  ```
+  https://github.com/{owner}/{repo}/pull/new/{branch}
+  ```
+  The operator opens the PR from that link, so *they* are the author — which both makes the PR genuinely theirs **and** wakes Bugbot.
+- **Teams plan:** Bugbot runs for *all contributors regardless of membership*. Bot-authored PRs auto-review on open — no handoff, no comment, no reopen. (Confirmed on a fresh `[bot]`-authored PR.)
+- **Billing watch (Teams):** seats are counted per "user who authored PRs reviewed by Bugbot," and there is a pooled 200-PR/license cap. How a `[bot]` author is seat-counted is undocumented — monitor the dashboard/invoice.
 
-When the operator wants the PR to be **genuinely theirs** — author-matched tooling and all — the promise-keeping path is the one-click handoff in `getting-started.md`: the agent pushes the branch and hands back
-
-```
-https://github.com/{owner}/{repo}/pull/new/{branch}
-```
-
-A PR opened from that link is authored by the operator, with the agent's commit history intact underneath. One click, nothing stored, every wall standing.
+For *any* AI eyes on a bot-authored PR without re-authoring, a **human-posted** `@cursoragent review` spawns a Cursor Cloud Agent review (a different product from Bugbot; a bot-posted trigger is ignored).
 
 ## Agent recipe (copy/paste)
 
-1. Resolve id: `GET /users/{login}` → `id`.
-2. Commit with author **and** committer set to `{id}+{login}@users.noreply.github.com`.
+1. Resolve id: `GET /users/{login}` -> `id`.
+2. Commit with author **and** committer = `{id}+{login}@users.noreply.github.com`.
 3. Push the branch with the minted write token (`x-access-token:<token>`).
-4. Either open the PR and then assign + request-review + `@`-mention the operator, **or** hand back the `pull/new/{branch}` link so the operator opens it themselves.
-5. Prefer the handoff link whenever author-matched tooling matters; prefer direct-open + assignment when bot authorship is fine and you just want the operator to see it.
+4. Surface it: **assign the operator** (+ optional `@`-mention). Request review only if a review obligation is actually wanted.
+5. Review tooling: on **Teams**, open the PR directly — Bugbot auto-runs. On **Individual**, hand back the `pull/new/{branch}` link so the operator authors it (makes it theirs *and* triggers Bugbot).
