@@ -12,11 +12,20 @@
  *   quota:mint:{login}:{ts}:{r}  8-day mint log         → active users
  *   quota:tier:{login}           set by billing          → paid users
  *
+ * Operator-owned grants (the operator login plus any configured test logins)
+ * are netted out of the headline counts: they are real KV records but they are
+ * not adoption, and counting them produces a recurring false "+1 outside user"
+ * read. Raw counts and the netting amount are reported alongside, never instead,
+ * so the test grant stays observable while never inflating the headline.
+ *
  * KV `list` is paginated and eventually consistent; fine at current scale
  * (revisit alongside the Durable Object counter swap, per the governance doc).
  * Stripe is the source of truth for subscriptions: the paid count is
  * cross-checked against live active subscriptions, and disagreement is
- * surfaced in the response — never silently reconciled.
+ * surfaced in the response — never silently reconciled. The cross-check uses
+ * the RAW paid count, because the operator's own dogfooding subscription is a
+ * real Stripe subscription; comparing net paid (which excludes the operator)
+ * against Stripe would manufacture a permanent false discrepancy.
  */
 
 import type { Env } from "./types";
@@ -36,6 +45,26 @@ async function distinctLogins(kv: KVNamespace, prefix: string): Promise<Set<stri
     cursor = page.list_complete ? undefined : page.cursor;
   } while (cursor);
   return logins;
+}
+
+/** The operator-owned exclusion set: OPERATOR_LOGIN plus any TEST_LOGINS.
+ *  Configured, never hardcoded. */
+function operatorOwnedLogins(env: Env): Set<string> {
+  const set = new Set<string>();
+  if (env.OPERATOR_LOGIN) set.add(env.OPERATOR_LOGIN);
+  if (env.TEST_LOGINS) {
+    for (const login of env.TEST_LOGINS.split(",").map((s) => s.trim()).filter(Boolean)) {
+      set.add(login);
+    }
+  }
+  return set;
+}
+
+/** Count of `logins` after removing the excluded (operator-owned) set. */
+function netSize(logins: Set<string>, excluded: Set<string>): number {
+  let n = 0;
+  for (const login of logins) if (!excluded.has(login)) n++;
+  return n;
 }
 
 /** Count Stripe subscriptions with status=active. Undefined when billing is
@@ -66,12 +95,22 @@ async function stripeActiveSubscriptions(env: Env): Promise<number | undefined> 
 }
 
 export interface OperatorStats {
+  /** Net of operator-owned grants — this is the external-adoption number. */
   connected_users: number;
+  /** Including operator-owned grants. */
+  connected_users_raw: number;
+  /** Net of operator-owned grants. */
   active_users_8d: number;
+  active_users_8d_raw: number;
+  /** Net of operator-owned grants. */
   paid_users: number;
+  paid_users_raw: number;
+  /** How many operator-owned grants were netted out of the connected count. */
+  operator_owned_grants: number;
+  /** net paid ÷ net connected. */
   crude_conversion_ratio: number | null;
   stripe_active_subscriptions?: number;
-  /** Present only when KV's paid count and Stripe's disagree. */
+  /** Present only when the RAW paid count and Stripe's disagree. */
   discrepancy?: string;
   definitions: string;
 }
@@ -85,20 +124,30 @@ export async function computeStats(env: Env): Promise<OperatorStats> {
     stripeActiveSubscriptions(env),
   ]);
 
+  const excluded = operatorOwnedLogins(env);
+  const connectedNet = netSize(connected, excluded);
+  const activeNet = netSize(active, excluded);
+  const paidNet = netSize(paidTiers, excluded);
+
   const stats: OperatorStats = {
-    connected_users: connected.size,
-    active_users_8d: active.size,
-    paid_users: paidTiers.size,
+    connected_users: connectedNet,
+    connected_users_raw: connected.size,
+    active_users_8d: activeNet,
+    active_users_8d_raw: active.size,
+    paid_users: paidNet,
+    paid_users_raw: paidTiers.size,
+    operator_owned_grants: connected.size - connectedNet,
     crude_conversion_ratio:
-      connected.size > 0 ? Math.round((paidTiers.size / connected.size) * 1000) / 1000 : null,
+      connectedNet > 0 ? Math.round((paidNet / connectedNet) * 1000) / 1000 : null,
     definitions: "governance/internal/operator-observability.md",
   };
   if (stripeActive !== undefined) {
     stats.stripe_active_subscriptions = stripeActive;
+    // Cross-check against RAW: the operator's own subscription is a real Stripe sub.
     if (stripeActive !== paidTiers.size) {
       stats.discrepancy =
-        `KV reports ${paidTiers.size} paid login(s); Stripe reports ${stripeActive} active ` +
-        `subscription(s). Stripe is the source of truth — investigate the webhook path.`;
+        `KV reports ${paidTiers.size} paid login(s) (raw, incl. operator-owned); Stripe reports ` +
+        `${stripeActive} active subscription(s). Stripe is the source of truth — investigate the webhook path.`;
     }
   }
   return stats;

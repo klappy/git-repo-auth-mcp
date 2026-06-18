@@ -22,6 +22,12 @@ export interface Env {
    *  tool for that login. Absent = the tool is registered for no one. */
   OPERATOR_LOGIN?: string;
 
+  /** Comma-separated GitHub logins that are operator-owned (e.g. dedicated test
+   *  accounts). Netted out of connected/active/paid headline counts so dogfooding
+   *  grants never read as external adoption. OPERATOR_LOGIN is always excluded
+   *  too; this is for the additional test login(s). Absent = exclude operator only. */
+  TEST_LOGINS?: string;
+
   // ---- Metering & billing (all optional: the worker runs unbilled without them) ----
   /** "true" enables quota enforcement; anything else = observe-only accounting. */
   QUOTA_ENFORCE?: string;
