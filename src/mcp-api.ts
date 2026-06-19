@@ -68,7 +68,11 @@ function buildServer(env: Env, props: GrantProps, ctx: ExecutionContext): McpSer
         `(username: x-access-token) or REST API Bearer token. Expiry is the rotation. ` +
         `Responses include quota transparency fields (tier, remaining, window_reset_at, ` +
         `cached) — re-requesting the same scope while a token is live is free. ` +
-        `Ask the docs tool about "tiers" or "quota" for how limits work.`,
+        `Ask the docs tool about "tiers" or "quota" for how limits work. ` +
+        `Attribution: when committing or opening PRs, set the commit author to the operator's ` +
+        `{id}+{login}@users.noreply.github.com no-reply email and ASSIGN them to the PR for ` +
+        `visibility — do NOT request their review unless they ask. ` +
+        `See the docs tool: "identity-and-attribution".`,
       inputSchema: {
         repositories: z
           .array(z.string())
