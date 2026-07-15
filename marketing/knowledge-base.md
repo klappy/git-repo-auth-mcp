@@ -48,11 +48,11 @@ Every mint response includes: `tier`, `remaining`, `window_reset_at`, `weekly_re
 
 # 6. Pricing (the five-tier ladder)
 
-- **Free** — one-time bucket of 100 mints (fifty look-and-act pairs), no expiry, no card. The designed first-run experience.
-- **Solo** — $1/month, billed $24 every 2 years. 5 agents (10 tokens) per rolling 5-hour window.
-- **Pro** — $5/month, billed $60 yearly. 30 agents (60 tokens) per rolling 5-hour window.
-- **Team** — $25/month. 200 agent slots per rolling 5-hour window. "A team of agents — one human, no seats."
-- **Fleet** — $100/month. 1,000 agent slots per rolling 5-hour window. "Never think about the window again."
+- **Free** — one-time bucket of 1,000 mints (five hundred look-and-act pairs), no expiry, no card. The designed first-run experience.
+- **Solo** — $1/month, billed $24 every 2 years. 50 agents (100 tokens) per rolling 5-hour window.
+- **Pro** — $5/month, billed $60 yearly. 300 agents (600 tokens) per rolling 5-hour window.
+- **Team** — $25/month. 2,000 agent slots per rolling 5-hour window. "A team of agents — one human, no seats."
+- **Fleet** — $100/month. 10,000 agent slots per rolling 5-hour window. "Never think about the window again."
 
 Every tier budgets two tokens per agent — a read-only token to look, a write token to act; the mix isn't policed. Rules: the hero number on any pricing surface is always the per-month price. Upgrades are prorated and immediate. No refunds; cancel anytime, access runs to period end. Self-hosting the same open-source code is $0 forever.
 
@@ -96,7 +96,7 @@ Every tier budgets two tokens per agent — a read-only token to look, a write t
 5. **The demo beat — the write:** ask again, by name: contents write, pull_requests write. The commit lands signed `git-repo-auth[bot]` — auditable provenance.
 6. **The trust story:** the service stores no tokens, holds no power GitHub doesn't delegate, and the kill switch (uninstall) belongs entirely to the user.
 7. **The breadth proof:** one server, zero per-surface work, runs everywhere Claude does — phone, web, desktop, Claude Code, Cowork. This entire product was built and submitted without a laptop — shipped from a phone most days, with an iPad for the submission form — using its own minted tokens to push its own commits.
-8. **The honest economics:** real free tier (50 mints, no card), plans from $1/month, prorated upgrades, no refunds because you can try before you pay, and $0 self-hosting of the same open code.
+8. **The honest economics:** real free tier (1,000 mints, no card), plans from $1/month, prorated upgrades, no refunds because you can try before you pay, and $0 self-hosting of the same open code.
 
 # 9. Entity & Links
 
@@ -224,7 +224,7 @@ Deliberately not yet licensed (all rights reserved by default) — a licensing d
 
 # Getting Started
 
-Never given an AI system real access to your repos before? This is the walkthrough. You have a free bucket of 50 token mints — enough to genuinely experience it, no card required.
+Never given an AI system real access to your repos before? This is the walkthrough. You have a free bucket of 1,000 token mints — enough to genuinely experience it, no card required.
 
 ## The two-minute path
 

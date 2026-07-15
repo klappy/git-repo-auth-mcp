@@ -1,6 +1,6 @@
 # Getting Started
 
-Never given an AI system real access to your repos before? This is the walkthrough. You have a free bucket of 50 token mints — enough to genuinely experience it, no card required.
+Never given an AI system real access to your repos before? This is the walkthrough. You have a free bucket of 1,000 token mints — enough to genuinely experience it, no card required.
 
 ## The two-minute path
 
@@ -29,7 +29,7 @@ https://github.com/<owner>/<repo>/pull/new/<branch>
 
 Tell your agent once: *"after pushing a branch, give me the pull-request creation link instead of opening the PR yourself."* From then on every handoff is a single click. Agents can still open PRs directly when bot authorship is fine for your workflow — both paths are legitimate; this tip just makes the personal one effortless.
 
-## What to try with your 50 mints
+## What to try with your 1,000 mints
 
 - Point it at an old project and ask for a code review PR.
 - Have it triage your open issues and draft fixes.

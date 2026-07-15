@@ -4,25 +4,25 @@
 
 ## What you are paying for
 
-Concurrency. A minted token lives at most one hour, and an agent doing real work typically mints twice — a read-only token to look (the secure default), then a write token to act. So every tier budgets **two tokens per agent**: Solo is 5 agents and 10 tokens, Pro is 30 agents and 60 tokens, and so on. We don't police the mix — two reads, two writes, a read and a write, all the same to us; the pair is generosity, not a rule. Minting costs the operator almost nothing — your API traffic rides your own GitHub installation's rate limit (5,000–12,500 req/hr, isolated per installation, enforced by GitHub). The tiers price throughput, and we'd rather say that plainly than dress it up.
+Concurrency. A minted token lives at most one hour, and an agent doing real work typically mints twice — a read-only token to look (the secure default), then a write token to act. So every tier budgets **two tokens per agent**: Solo is 50 agents and 100 tokens, Pro is 300 agents and 600 tokens, and so on. We don't police the mix — two reads, two writes, a read and a write, all the same to us; the pair is generosity, not a rule. Minting costs the operator almost nothing — your API traffic rides your own GitHub installation's rate limit (5,000–12,500 req/hr, isolated per installation, enforced by GitHub). The tiers price throughput, and we'd rather say that plainly than dress it up.
 
 ## The tiers
 
-How big is your agentic concurrency? Every tier is one human, no seats — the team is your agents. Tier sizes are agent counts (Solo 5, Pro 30, Team 200, Fleet 1,000); the token column is double that, because looking and acting are both tokens.
+How big is your agentic concurrency? Every tier is one human, no seats — the team is your agents. Tier sizes are agent counts (Solo 50, Pro 300, Team 2,000, Fleet 10,000); the token column is double that, because looking and acting are both tokens.
 
 | Tier | Tokens per rolling 5-hour window (two per agent) | Weekly backstop | Price |
 |---|---|---|---|
-| Free | one-time bucket of **100 mints total** | — | $0 |
-| Solo | **10** | 120 | $1/mo ($24 per 2 years) |
-| Pro | **60** | 720 | $5/mo ($60 per year) |
-| Team | **400** | 4,800 | $25/mo |
-| Fleet | **2,000** | 24,000 | $100/mo |
+| Free | one-time bucket of **1000 mints total** | — | $0 |
+| Solo | **100** | 1,200 | $1/mo ($24 per 2 years) |
+| Pro | **600** | 7,200 | $5/mo ($60 per year) |
+| Team | **4,000** | 48,000 | $25/mo |
+| Fleet | **20,000** | 240,000 | $100/mo |
 
-Billing cadence scales with commitment: Solo is $1/mo billed $24 per two years, Pro is $5/mo billed $60 per year, Team and Fleet are month-to-month. Above it, the per-slot price falls as you climb — $0.20 at Solo, $0.167 at Pro, $0.125 at Team, $0.10 at Fleet — so upgrading is always the better deal per agent. No bundling tricks, no "contact sales." Upgrades are prorated and immediate: switch mid-period and the unused remainder of your current tier is credited toward the new one — a few days or weeks in, when you hit the wall, upgrading costs the difference, not a restart. Downgrades take effect at period end.
+Billing cadence scales with commitment: Solo is $1/mo billed $24 per two years, Pro is $5/mo billed $60 per year, Team and Fleet are month-to-month. Above it, the per-slot price falls as you climb — $0.02 at Solo, $0.017 at Pro, $0.013 at Team, $0.01 at Fleet — so upgrading is always the better deal per agent. No bundling tricks, no "contact sales." Upgrades are prorated and immediate: switch mid-period and the unused remainder of your current tier is credited toward the new one — a few days or weeks in, when you hit the wall, upgrading costs the difference, not a restart. Downgrades take effect at period end.
 
 ## How the free bucket works
 
-You get 100 mints, once. No windows, no decay, no daily trickle. Use all 100 in an hour or spread them over a month — your call. When the bucket is empty, minting stops and the response tells you how to upgrade. A hundred mints — fifty look-and-act pairs — is enough to genuinely feel what it's like to hand an agent your repos; if you burned through them, you already know whether this is worth paying for.
+You get 1000 mints, once. No windows, no decay, no daily trickle. Use all 100 in an hour or spread them over a month — your call. When the bucket is empty, minting stops and the response tells you how to upgrade. A thousand mints — five hundred look-and-act pairs — is enough to genuinely feel what it's like to hand an agent your repos; if you burned through them, you already know whether this is worth paying for.
 
 ## How paid windows work
 
