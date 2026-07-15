@@ -13,6 +13,16 @@ export interface Env {
   /** Optional comma-separated extra origins allowed to call with an Origin header
    *  (e.g. a browser-based inspector). Absent = same-origin only. */
   ALLOWED_ORIGINS?: string;
+  /** Static machine credential for the ARS worker (v1-interim, single-tenant;
+   *  captain ruling 2026-07-14, board ars-gitauth-mint-credential option 1).
+   *  Absent = the machine path is off and /mcp stays OAuth-only. Rotated on
+   *  every main deploy by scripts/provision-service-key.mjs. */
+  ARS_SERVICE_KEY?: string;
+  /** GitHub account whose App installation the service key is pinned to.
+   *  Default "klappy". EXPLICITLY not a tenant-shared pattern — v2 owes
+   *  per-tenant credentials (multitenancy policy §13). */
+  ARS_SERVICE_ACCOUNT?: string;
+
   /** Provider state: hashed OAuth grants + transient pending records. */
   OAUTH_KV: KVNamespace;
   /** Injected by OAuthProvider on the default handler. */

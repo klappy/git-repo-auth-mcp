@@ -17,6 +17,7 @@
  */
 
 import OAuthProvider from "@cloudflare/workers-oauth-provider";
+import { handleServiceRequest, isServiceRequest } from "./service-auth";
 import { GitHubAuthHandler } from "./github-auth";
 import { McpApiHandler } from "./mcp-api";
 import { isOriginAllowed } from "./origin";
@@ -45,6 +46,13 @@ export default {
       !isOriginAllowed(request.headers.get("Origin"), request.url, env.ALLOWED_ORIGINS)
     ) {
       return new Response("Forbidden: cross-origin request rejected", { status: 403 });
+    }
+    // Machine-credential path (v1-interim, captain ruling 2026-07-14): a
+    // single static service key lets the ARS worker reach /mcp without an
+    // OAuth grant, pinned to the ARS_SERVICE_ACCOUNT installation. Unset key
+    // = path off; wrong key = falls through to the provider's normal 401.
+    if (new URL(request.url).pathname.startsWith("/mcp") && isServiceRequest(request, env)) {
+      return handleServiceRequest(request, env, ctx);
     }
     return provider.fetch(request, env, ctx);
   },

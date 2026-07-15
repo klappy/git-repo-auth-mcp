@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
-    "deploy": "node scripts/build-info.mjs && wrangler deploy",
+    "deploy": "node scripts/build-info.mjs && wrangler deploy && node scripts/provision-service-key.mjs",
     "typecheck": "tsc --noEmit",
     "build-info": "node scripts/build-info.mjs",
     "test": "vitest run",
