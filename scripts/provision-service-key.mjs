@@ -14,17 +14,25 @@
 //
 // Fail-loud: a failed PUT fails the build visibly. Skips cleanly (exit 0)
 // when run locally (no CLOUDFLARE_API_TOKEN) or on non-main branches.
+import { execSync } from "node:child_process";
 import crypto from "node:crypto";
 
 const token = process.env.CLOUDFLARE_API_TOKEN;
 const account = process.env.CLOUDFLARE_ACCOUNT_ID;
-const branch = process.env.WORKERS_CI_BRANCH;
+let localBranch;
+try {
+  localBranch = execSync("git rev-parse --abbrev-ref HEAD", { encoding: "utf8" }).trim();
+} catch {
+  localBranch = null;
+}
+const branch =
+  process.env.WORKERS_CI_BRANCH || process.env.GITHUB_REF_NAME || localBranch || "unknown";
 
 if (!token || !account) {
   console.log("provision: no Cloudflare API credentials in env — skipping (local run).");
   process.exit(0);
 }
-if (branch && branch !== "main") {
+if (branch !== "main") {
   console.log(`provision: branch '${branch}' is not main — skipping rotation.`);
   process.exit(0);
 }

@@ -83,25 +83,31 @@ async function resolveServiceInstallation(env: Env): Promise<GrantProps> {
     privateKey: normalizePrivateKey(env.GH_APP_PRIVATE_KEY),
   });
   const { token: jwt } = await appAuth({ type: "app" });
-  const res = await fetch("https://api.github.com/app/installations?per_page=100", {
-    headers: {
-      authorization: `Bearer ${jwt}`,
-      accept: "application/vnd.github+json",
-      "user-agent": "git-repo-auth-mcp",
-    },
-  });
-  if (!res.ok) {
-    throw new Error(`GitHub /app/installations failed: HTTP ${res.status}`);
-  }
-  const installations = (await res.json()) as InstallationRecord[];
-  const hit = pickInstallation(installations, account);
-  if (!hit) {
-    throw new Error(
-      `No installation of this App is owned by '${account}' (ARS_SERVICE_ACCOUNT).`
+  for (let page = 1; ; page++) {
+    const res = await fetch(
+      `https://api.github.com/app/installations?per_page=100&page=${page}`,
+      {
+        headers: {
+          authorization: `Bearer ${jwt}`,
+          accept: "application/vnd.github+json",
+          "user-agent": "git-repo-auth-mcp",
+        },
+      }
     );
+    if (!res.ok) {
+      throw new Error(`GitHub /app/installations failed: HTTP ${res.status}`);
+    }
+    const installations = (await res.json()) as InstallationRecord[];
+    const hit = pickInstallation(installations, account);
+    if (hit) {
+      cached = { login: account, installationId: hit.id, at: Date.now() };
+      return { login: account, installationId: hit.id, accountLabel: account };
+    }
+    if (installations.length < 100) break;
   }
-  cached = { login: account, installationId: hit.id, at: Date.now() };
-  return { login: account, installationId: hit.id, accountLabel: account };
+  throw new Error(
+    `No installation of this App is owned by '${account}' (ARS_SERVICE_ACCOUNT).`
+  );
 }
 
 /** Serve /mcp for the service caller: same handler, same quota/metering,
