@@ -22,7 +22,7 @@ Billing cadence scales with commitment: Solo is $1/mo billed $24 per two years, 
 
 ## How the free bucket works
 
-You get 1000 mints, once. No windows, no decay, no daily trickle. Use all 100 in an hour or spread them over a month — your call. When the bucket is empty, minting stops and the response tells you how to upgrade. A thousand mints — five hundred look-and-act pairs — is enough to genuinely feel what it's like to hand an agent your repos; if you burned through them, you already know whether this is worth paying for.
+You get 1000 mints, once. No windows, no decay, no daily trickle. Use all 1000 in an hour or spread them over a month — your call. When the bucket is empty, minting stops and the response tells you how to upgrade. A thousand mints — five hundred look-and-act pairs — is enough to genuinely feel what it's like to hand an agent your repos; if you burned through them, you already know whether this is worth paying for.
 
 ## How paid windows work
 
