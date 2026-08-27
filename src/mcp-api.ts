@@ -69,9 +69,11 @@ function buildServer(env: Env, props: GrantProps, ctx: ExecutionContext): McpSer
         `Responses include quota transparency fields (tier, remaining, window_reset_at, ` +
         `cached) — re-requesting the same scope while a token is live is free. ` +
         `Ask the docs tool about "tiers" or "quota" for how limits work. ` +
-        `Attribution: when committing or opening PRs, set the commit author to the operator's ` +
-        `{id}+{login}@users.noreply.github.com no-reply email and ASSIGN them to the PR for ` +
-        `visibility — do NOT request their review unless they ask. ` +
+        `Attribution: the response's 'attribution' field is the operator's exact ` +
+        `{id}+{login}@users.noreply.github.com no-reply email, resolved live at mint time — ` +
+        `use it verbatim as commit author AND committer, never re-derive or guess it (a token's ` +
+        `numeric prefix is NOT the operator's GitHub id). ASSIGN the operator to any PR you open ` +
+        `for visibility — do NOT request their review unless they ask. ` +
         `See the docs tool: "identity-and-attribution".`,
       inputSchema: {
         repositories: z
@@ -159,10 +161,38 @@ function buildServer(env: Env, props: GrantProps, ctx: ExecutionContext): McpSer
         ctx.waitUntil(emitMeterEvent(env, props.login));
       }
 
+      // Root-cause fix for the recurring commit-attribution bug (2026-08-26
+      // debrief): callers were hallucinating the operator's numeric GitHub id
+      // from memory, or lifting it off the token string, instead of resolving
+      // it live via GET /users/{login} per docs "identity-and-attribution".
+      // Fetched-not-recalled means the caller never has to reproduce that
+      // step from memory — the service resolves it once per mint and hands
+      // back the exact no-reply email to stamp on commits/PRs. Best-effort:
+      // a lookup failure must never break minting.
+      let attribution: string | undefined;
+      try {
+        const userRes = await fetch(`https://api.github.com/users/${props.login}`, {
+          headers: {
+            authorization: `Bearer ${result.token}`,
+            accept: "application/vnd.github+json",
+            "user-agent": "git-repo-auth-mcp",
+          },
+        });
+        if (userRes.ok) {
+          const user = (await userRes.json()) as { id?: number };
+          if (typeof user.id === "number") {
+            attribution = `${user.id}+${props.login}@users.noreply.github.com`;
+          }
+        }
+      } catch {
+        // swallow — attribution is best-effort, never a mint blocker
+      }
+
       const payload = {
         token: result.token,
         expires_at: result.expiresAt,
         account: props.accountLabel,
+        ...(attribution ? { attribution } : {}),
         permissions: result.permissions,
         repository_selection: result.repositorySelection,
         quota: {
