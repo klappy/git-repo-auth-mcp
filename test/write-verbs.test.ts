@@ -1,7 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
+const authCalls: Array<{
+  type: string;
+  installationId: number;
+  repositoryNames?: string[];
+  permissions?: Record<string, string>;
+}> = [];
+
 vi.mock("@octokit/auth-app", () => ({
   createAppAuth: () => async (opts: { repositoryNames?: string[] }) => {
+    authCalls.push(opts as (typeof authCalls)[number]);
     if (opts.repositoryNames?.includes("no-grant")) {
       const err = new Error("Not Found") as Error & { status: number };
       err.status = 404;
@@ -47,6 +55,9 @@ const ctx = { waitUntil: () => {} } as unknown as ExecutionContext;
 
 function githubRoute(url: string, init?: RequestInit): Response | undefined {
   const method = init?.method ?? "GET";
+  if (url === "https://api.github.com/users/octocat" && method === "GET") {
+    return Response.json({ id: 583231 });
+  }
   if (url === "https://api.github.com/repos/octocat/hello" && method === "GET") {
     return Response.json({ default_branch: "main" });
   }
@@ -114,6 +125,7 @@ describe("git_put", () => {
   let logSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
+    authCalls.length = 0;
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
@@ -124,6 +136,7 @@ describe("git_put", () => {
       })
     );
     logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    logSpy.mockClear();
   });
 
   it("happy path: two files land in one commit and returns the sha", async () => {
@@ -176,10 +189,72 @@ describe("git_put", () => {
     expect(logged.some((l: string) => l.includes("git_put"))).toBe(true);
     expect(logged.some((l: string) => l.includes("s3cr3t-token"))).toBe(false);
   });
+
+  it("mints exactly {contents: write} scoped to just the named repo", async () => {
+    const env = stubEnv();
+    await gitPut(env, props, ctx, {
+      repo: "octocat/hello",
+      branch: "feature",
+      message: "add two files",
+      files: [{ path: "a.txt", content: "hello" }],
+    });
+
+    expect(authCalls).toHaveLength(1);
+    expect(authCalls[0]).toEqual({
+      type: "installation",
+      installationId: 42,
+      repositoryNames: ["hello"],
+      permissions: { contents: "write" },
+    });
+  });
+
+  it("emits an audit row with outcome 'refused' and a reason when the repo isn't granted", async () => {
+    const env = stubEnv();
+    await gitPut(env, props, ctx, {
+      repo: "octocat/no-grant",
+      branch: "feature",
+      message: "should not land",
+      files: [{ path: "a.txt", content: "hello" }],
+    });
+
+    const logged = logSpy.mock.calls.map((c: unknown[]) => JSON.parse(String(c[0])));
+    const row = logged.find((l: { verb: string }) => l.verb === "git_put");
+    expect(row).toBeDefined();
+    expect(row.outcome).toBe("refused");
+    expect(row.reason).toBe("repo_not_granted");
+    expect(JSON.stringify(row)).not.toContain("s3cr3t-token");
+  });
+
+  it("stamps author and committer from the resolved GitHub user, not the App bot", async () => {
+    const env = stubEnv();
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input.toString();
+      const res = githubRoute(url, init);
+      if (!res) throw new Error(`unstubbed fetch: ${init?.method ?? "GET"} ${url}`);
+      return res;
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await gitPut(env, props, ctx, {
+      repo: "octocat/hello",
+      branch: "feature",
+      message: "add a file",
+      files: [{ path: "a.txt", content: "hello" }],
+    });
+
+    const commitCall = fetchMock.mock.calls.find(
+      (c) => String(c[0]) === "https://api.github.com/repos/octocat/hello/git/commits" && (c[1] as RequestInit)?.method === "POST"
+    );
+    expect(commitCall).toBeDefined();
+    const body = JSON.parse(String((commitCall![1] as RequestInit).body));
+    expect(body.author).toEqual({ name: "octocat", email: "583231+octocat@users.noreply.github.com" });
+    expect(body.committer).toEqual({ name: "octocat", email: "583231+octocat@users.noreply.github.com" });
+  });
 });
 
 describe("git_move", () => {
   beforeEach(() => {
+    authCalls.length = 0;
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
@@ -225,12 +300,32 @@ describe("git_move", () => {
     expect(text).toContain("ghost.txt");
     expect(text).not.toContain("s3cr3t-token");
   });
+
+  it("mints exactly {contents: write} scoped to just the named repo", async () => {
+    const env = stubEnv();
+    await gitMove(env, props, ctx, {
+      repo: "octocat/hello",
+      branch: "main",
+      from: "old/file.txt",
+      to: "new/file.txt",
+      message: "move file",
+    });
+
+    expect(authCalls).toHaveLength(1);
+    expect(authCalls[0]).toEqual({
+      type: "installation",
+      installationId: 42,
+      repositoryNames: ["hello"],
+      permissions: { contents: "write" },
+    });
+  });
 });
 
 describe("pr_open", () => {
   let fetchMock: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
+    authCalls.length = 0;
     fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input.toString();
       const res = githubRoute(url, init);
@@ -275,5 +370,24 @@ describe("pr_open", () => {
     const text = result.content[0].text as string;
     expect(text).toContain("no-grant");
     expect(text).not.toContain("s3cr3t-token");
+  });
+
+  it("mints exactly {contents: read, pull_requests: write} scoped to just the named repo", async () => {
+    const env = stubEnv({ operatorLogin: "klappy" });
+    await prOpen(env, props, ctx, {
+      repo: "octocat/hello",
+      head: "feature",
+      base: "main",
+      title: "Add thing",
+      body: "Does the thing.",
+    });
+
+    expect(authCalls).toHaveLength(1);
+    expect(authCalls[0]).toEqual({
+      type: "installation",
+      installationId: 42,
+      repositoryNames: ["hello"],
+      permissions: { contents: "read", pull_requests: "write" },
+    });
   });
 });

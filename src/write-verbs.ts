@@ -35,12 +35,24 @@ function getAppAuth(env: Env): AppAuth {
   return appAuth;
 }
 
+type AuditCtx = { verb: string; login: string; repo: string };
+
+function logAudit(ctx: AuditCtx, outcome: "refused" | "landed", extra: Record<string, unknown>) {
+  console.log(JSON.stringify({ verb: ctx.verb, login: ctx.login, repo: ctx.repo, outcome, ...extra }));
+}
+
 function toolError(text: string) {
   return { content: [{ type: "text" as const, text }], isError: true as const };
 }
 
 function toolJsonError(payload: unknown) {
   return toolError(JSON.stringify(payload, null, 2));
+}
+
+/** Build + log a refused-outcome tool error in one place, so no refusal exit misses the audit row. */
+function refuse(ctx: AuditCtx, reason: string, payload: unknown) {
+  logAudit(ctx, "refused", { reason, ...(payload && typeof payload === "object" ? { payload } : {}) });
+  return typeof payload === "string" ? toolError(payload) : toolJsonError(payload);
 }
 
 async function gh(token: string, path: string, init?: RequestInit): Promise<Response> {
@@ -56,7 +68,7 @@ async function gh(token: string, path: string, init?: RequestInit): Promise<Resp
   });
 }
 
-async function refusal(res: Response, action: string) {
+async function refusal(ctx: AuditCtx, res: Response, action: string) {
   let detail = "";
   try {
     detail = JSON.stringify(await res.json());
@@ -69,13 +81,22 @@ async function refusal(res: Response, action: string) {
       : res.status === 404
         ? "Not found — check the repo name, branch/base, or that this installation has access to that repository."
         : "GitHub rejected the request.";
-  return toolJsonError({
+  return refuse(ctx, "github_request_failed", {
     error: "github_request_failed",
     action,
     status: res.status,
     detail,
     hint,
   });
+}
+
+/** Resolve the numeric id behind a login so commits can be attributed by no-reply
+ *  email (see governance/external/identity-and-attribution.md) instead of the bot. */
+async function resolveIdentity(token: string, login: string): Promise<{ name: string; email: string } | null> {
+  const res = await gh(token, `/users/${encodeURIComponent(login)}`);
+  if (!res.ok) return null;
+  const user = (await res.json()) as { id: number };
+  return { name: login, email: `${user.id}+${login}@users.noreply.github.com` };
 }
 
 const filesShape = z
@@ -91,9 +112,13 @@ const filesShape = z
         .optional()
         .describe("Original path this replaces (rename+edit); paired with 'content'."),
       mode: z
-        .string()
+        .enum(["100644", "100755"])
         .optional()
-        .describe('Git file mode, e.g. "100644" (default) or "100755" for executable.'),
+        .describe('Git file mode: "100644" (default) or "100755" for executable.'),
+      encoding: z
+        .enum(["utf-8", "base64"])
+        .optional()
+        .describe('Encoding of "content": "utf-8" (default) or "base64" for binary files.'),
     })
   )
   .min(1);
@@ -114,20 +139,27 @@ type GitPutInput = {
   branch: string;
   base?: string;
   message: string;
-  files: Array<{ path: string; content?: string; from_path?: string; mode?: string }>;
+  files: Array<{
+    path: string;
+    content?: string;
+    from_path?: string;
+    mode?: "100644" | "100755";
+    encoding?: "utf-8" | "base64";
+  }>;
 };
 
 async function gitPut(env: Env, props: GrantProps, ctx: ExecutionContext, input: GitPutInput) {
+  const audit: AuditCtx = { verb: "git_put", login: props.login, repo: input.repo };
   const parts = input.repo.split("/");
   if (parts.length !== 2 || !parts[0] || !parts[1]) {
-    return toolError(`'repo' must be "owner/name", got '${input.repo}'.`);
+    return refuse(audit, "bad_repo_format", `'repo' must be "owner/name", got '${input.repo}'.`);
   }
   const [owner, name] = parts;
 
   const scope = await scopeKey(props.installationId, [name], { contents: "write" });
   const decision = await checkMint(env, props.login, scope);
   if (!decision.ok) {
-    return toolJsonError({
+    return refuse(audit, "quota_exceeded", {
       error: "quota_exceeded",
       limit_hit: decision.limit_hit,
       tier: decision.tier,
@@ -152,7 +184,7 @@ async function gitPut(env: Env, props: GrantProps, ctx: ExecutionContext, input:
     }
     const status = (err as { status?: number } | null)?.status;
     if (status === 404 || status === 422) {
-      return toolJsonError({
+      return refuse(audit, "repo_not_granted", {
         error: "repo_not_granted",
         detail:
           `This connection's installation grant does not include '${input.repo}', or the App lacks ` +
@@ -170,16 +202,26 @@ async function gitPut(env: Env, props: GrantProps, ctx: ExecutionContext, input:
 
   const token = minted.token;
 
+  const identity = await resolveIdentity(token, props.login);
+  if (!identity) {
+    return refuse(audit, "identity_resolution_failed", {
+      error: "identity_resolution_failed",
+      detail:
+        `Could not resolve a GitHub user id for '${props.login}' via GET /users/${props.login} — ` +
+        `refusing to commit as the App bot. Retry, or check the login is a real GitHub account.`,
+    });
+  }
+
   let base = input.base;
   if (!base) {
     const repoRes = await gh(token, `/repos/${owner}/${name}`);
-    if (!repoRes.ok) return refusal(repoRes, "read repository metadata");
+    if (!repoRes.ok) return refusal(audit, repoRes, "read repository metadata");
     const repoJson = (await repoRes.json()) as { default_branch: string };
     base = repoJson.default_branch;
   }
 
   const baseRefRes = await gh(token, `/repos/${owner}/${name}/git/ref/heads/${encodeURIComponent(base)}`);
-  if (!baseRefRes.ok) return refusal(baseRefRes, `resolve base branch '${base}'`);
+  if (!baseRefRes.ok) return refusal(audit, baseRefRes, `resolve base branch '${base}'`);
   const baseRef = (await baseRefRes.json()) as { object: { sha: string } };
   const baseSha = baseRef.object.sha;
 
@@ -193,17 +235,17 @@ async function gitPut(env: Env, props: GrantProps, ctx: ExecutionContext, input:
       method: "POST",
       body: JSON.stringify({ ref: `refs/heads/${input.branch}`, sha: baseSha }),
     });
-    if (!createRes.ok) return refusal(createRes, `create branch '${input.branch}'`);
+    if (!createRes.ok) return refusal(audit, createRes, `create branch '${input.branch}'`);
     parentSha = baseSha;
   } else if (branchRefRes.ok) {
     const branchRef = (await branchRefRes.json()) as { object: { sha: string } };
     parentSha = branchRef.object.sha;
   } else {
-    return refusal(branchRefRes, `check branch '${input.branch}'`);
+    return refusal(audit, branchRefRes, `check branch '${input.branch}'`);
   }
 
   const parentCommitRes = await gh(token, `/repos/${owner}/${name}/git/commits/${parentSha}`);
-  if (!parentCommitRes.ok) return refusal(parentCommitRes, "read parent commit");
+  if (!parentCommitRes.ok) return refusal(audit, parentCommitRes, "read parent commit");
   const parentCommit = (await parentCommitRes.json()) as { tree: { sha: string } };
 
   type TreeEntry = { path: string; mode: string; type: "blob"; sha: string | null };
@@ -215,16 +257,18 @@ async function gitPut(env: Env, props: GrantProps, ctx: ExecutionContext, input:
       treeEntries.push({ path: file.from_path, mode: "100644", type: "blob", sha: null });
     }
     if (file.content === undefined) {
-      return toolError(
+      return refuse(
+        audit,
+        "missing_content",
         `File '${file.path}' has no 'content'. git_put writes content directly; a rename without ` +
           `content edits is git_move (not built in this slice).`
       );
     }
     const blobRes = await gh(token, `/repos/${owner}/${name}/git/blobs`, {
       method: "POST",
-      body: JSON.stringify({ content: file.content, encoding: "utf-8" }),
+      body: JSON.stringify({ content: file.content, encoding: file.encoding ?? "utf-8" }),
     });
-    if (!blobRes.ok) return refusal(blobRes, `create blob for '${file.path}'`);
+    if (!blobRes.ok) return refusal(audit, blobRes, `create blob for '${file.path}'`);
     const blob = (await blobRes.json()) as { sha: string; url: string };
     treeEntries.push({ path: file.path, mode: file.mode ?? "100644", type: "blob", sha: blob.sha });
     blobUrls.push(blob.url);
@@ -234,14 +278,20 @@ async function gitPut(env: Env, props: GrantProps, ctx: ExecutionContext, input:
     method: "POST",
     body: JSON.stringify({ base_tree: parentCommit.tree.sha, tree: treeEntries }),
   });
-  if (!treeRes.ok) return refusal(treeRes, "create tree");
+  if (!treeRes.ok) return refusal(audit, treeRes, "create tree");
   const tree = (await treeRes.json()) as { sha: string };
 
   const commitRes = await gh(token, `/repos/${owner}/${name}/git/commits`, {
     method: "POST",
-    body: JSON.stringify({ message: input.message, tree: tree.sha, parents: [parentSha] }),
+    body: JSON.stringify({
+      message: input.message,
+      tree: tree.sha,
+      parents: [parentSha],
+      author: identity,
+      committer: identity,
+    }),
   });
-  if (!commitRes.ok) return refusal(commitRes, "create commit");
+  if (!commitRes.ok) return refusal(audit, commitRes, "create commit");
   const commit = (await commitRes.json()) as { sha: string };
 
   const updateRes = await gh(
@@ -249,18 +299,13 @@ async function gitPut(env: Env, props: GrantProps, ctx: ExecutionContext, input:
     `/repos/${owner}/${name}/git/refs/heads/${encodeURIComponent(input.branch)}`,
     { method: "PATCH", body: JSON.stringify({ sha: commit.sha, force: false }) }
   );
-  if (!updateRes.ok) return refusal(updateRes, `update branch '${input.branch}'`);
+  if (!updateRes.ok) return refusal(audit, updateRes, `update branch '${input.branch}'`);
 
-  console.log(
-    JSON.stringify({
-      verb: "git_put",
-      login: props.login,
-      repo: input.repo,
-      branch: input.branch,
-      paths: input.files.map((f) => f.path),
-      sha: commit.sha,
-    })
-  );
+  logAudit(audit, "landed", {
+    branch: input.branch,
+    paths: input.files.map((f) => f.path),
+    sha: commit.sha,
+  });
 
   const payload = { sha: commit.sha, branch: input.branch, blob_urls: blobUrls };
   return { content: [{ type: "text" as const, text: JSON.stringify(payload, null, 2) }] };
@@ -285,16 +330,17 @@ type GitMoveInput = {
 };
 
 async function gitMove(env: Env, props: GrantProps, ctx: ExecutionContext, input: GitMoveInput) {
+  const audit: AuditCtx = { verb: "git_move", login: props.login, repo: input.repo };
   const parts = input.repo.split("/");
   if (parts.length !== 2 || !parts[0] || !parts[1]) {
-    return toolError(`'repo' must be "owner/name", got '${input.repo}'.`);
+    return refuse(audit, "bad_repo_format", `'repo' must be "owner/name", got '${input.repo}'.`);
   }
   const [owner, name] = parts;
 
   const scope = await scopeKey(props.installationId, [name], { contents: "write" });
   const decision = await checkMint(env, props.login, scope);
   if (!decision.ok) {
-    return toolJsonError({
+    return refuse(audit, "quota_exceeded", {
       error: "quota_exceeded",
       limit_hit: decision.limit_hit,
       tier: decision.tier,
@@ -319,7 +365,7 @@ async function gitMove(env: Env, props: GrantProps, ctx: ExecutionContext, input
     }
     const status = (err as { status?: number } | null)?.status;
     if (status === 404 || status === 422) {
-      return toolJsonError({
+      return refuse(audit, "repo_not_granted", {
         error: "repo_not_granted",
         detail:
           `This connection's installation grant does not include '${input.repo}', or the App lacks ` +
@@ -337,23 +383,33 @@ async function gitMove(env: Env, props: GrantProps, ctx: ExecutionContext, input
 
   const token = minted.token;
 
+  const identity = await resolveIdentity(token, props.login);
+  if (!identity) {
+    return refuse(audit, "identity_resolution_failed", {
+      error: "identity_resolution_failed",
+      detail:
+        `Could not resolve a GitHub user id for '${props.login}' via GET /users/${props.login} — ` +
+        `refusing to commit as the App bot. Retry, or check the login is a real GitHub account.`,
+    });
+  }
+
   const branchRefRes = await gh(
     token,
     `/repos/${owner}/${name}/git/ref/heads/${encodeURIComponent(input.branch)}`
   );
-  if (!branchRefRes.ok) return refusal(branchRefRes, `resolve branch '${input.branch}'`);
+  if (!branchRefRes.ok) return refusal(audit, branchRefRes, `resolve branch '${input.branch}'`);
   const branchRef = (await branchRefRes.json()) as { object: { sha: string } };
   const parentSha = branchRef.object.sha;
 
   const parentCommitRes = await gh(token, `/repos/${owner}/${name}/git/commits/${parentSha}`);
-  if (!parentCommitRes.ok) return refusal(parentCommitRes, "read parent commit");
+  if (!parentCommitRes.ok) return refusal(audit, parentCommitRes, "read parent commit");
   const parentCommit = (await parentCommitRes.json()) as { tree: { sha: string } };
 
   const fullTreeRes = await gh(
     token,
     `/repos/${owner}/${name}/git/trees/${parentCommit.tree.sha}?recursive=1`
   );
-  if (!fullTreeRes.ok) return refusal(fullTreeRes, "read tree");
+  if (!fullTreeRes.ok) return refusal(audit, fullTreeRes, "read tree");
   const fullTree = (await fullTreeRes.json()) as {
     tree: Array<{ path: string; mode: string; type: string; sha: string }>;
   };
@@ -364,7 +420,9 @@ async function gitMove(env: Env, props: GrantProps, ctx: ExecutionContext, input
     : fullTree.tree.filter((e) => e.type === "blob" && e.path === input.from);
 
   if (matches.length === 0) {
-    return toolError(
+    return refuse(
+      audit,
+      "from_not_found",
       `'from' path '${input.from}' was not found in branch '${input.branch}' — nothing to move.`
     );
   }
@@ -381,14 +439,20 @@ async function gitMove(env: Env, props: GrantProps, ctx: ExecutionContext, input
     method: "POST",
     body: JSON.stringify({ base_tree: parentCommit.tree.sha, tree: treeEntries }),
   });
-  if (!treeRes.ok) return refusal(treeRes, "create tree");
+  if (!treeRes.ok) return refusal(audit, treeRes, "create tree");
   const tree = (await treeRes.json()) as { sha: string };
 
   const commitRes = await gh(token, `/repos/${owner}/${name}/git/commits`, {
     method: "POST",
-    body: JSON.stringify({ message: input.message, tree: tree.sha, parents: [parentSha] }),
+    body: JSON.stringify({
+      message: input.message,
+      tree: tree.sha,
+      parents: [parentSha],
+      author: identity,
+      committer: identity,
+    }),
   });
-  if (!commitRes.ok) return refusal(commitRes, "create commit");
+  if (!commitRes.ok) return refusal(audit, commitRes, "create commit");
   const commit = (await commitRes.json()) as { sha: string };
 
   const updateRes = await gh(
@@ -396,19 +460,9 @@ async function gitMove(env: Env, props: GrantProps, ctx: ExecutionContext, input
     `/repos/${owner}/${name}/git/refs/heads/${encodeURIComponent(input.branch)}`,
     { method: "PATCH", body: JSON.stringify({ sha: commit.sha, force: false }) }
   );
-  if (!updateRes.ok) return refusal(updateRes, `update branch '${input.branch}'`);
+  if (!updateRes.ok) return refusal(audit, updateRes, `update branch '${input.branch}'`);
 
-  console.log(
-    JSON.stringify({
-      verb: "git_move",
-      login: props.login,
-      repo: input.repo,
-      branch: input.branch,
-      from: input.from,
-      to: input.to,
-      sha: commit.sha,
-    })
-  );
+  logAudit(audit, "landed", { branch: input.branch, from: input.from, to: input.to, sha: commit.sha });
 
   const payload = { sha: commit.sha, branch: input.branch, from: input.from, to: input.to };
   return { content: [{ type: "text" as const, text: JSON.stringify(payload, null, 2) }] };
@@ -433,9 +487,10 @@ type PrOpenInput = {
 };
 
 async function prOpen(env: Env, props: GrantProps, ctx: ExecutionContext, input: PrOpenInput) {
+  const audit: AuditCtx = { verb: "pr_open", login: props.login, repo: input.repo };
   const parts = input.repo.split("/");
   if (parts.length !== 2 || !parts[0] || !parts[1]) {
-    return toolError(`'repo' must be "owner/name", got '${input.repo}'.`);
+    return refuse(audit, "bad_repo_format", `'repo' must be "owner/name", got '${input.repo}'.`);
   }
   const [owner, name] = parts;
 
@@ -445,7 +500,7 @@ async function prOpen(env: Env, props: GrantProps, ctx: ExecutionContext, input:
   });
   const decision = await checkMint(env, props.login, scope);
   if (!decision.ok) {
-    return toolJsonError({
+    return refuse(audit, "quota_exceeded", {
       error: "quota_exceeded",
       limit_hit: decision.limit_hit,
       tier: decision.tier,
@@ -470,7 +525,7 @@ async function prOpen(env: Env, props: GrantProps, ctx: ExecutionContext, input:
     }
     const status = (err as { status?: number } | null)?.status;
     if (status === 404 || status === 422) {
-      return toolJsonError({
+      return refuse(audit, "repo_not_granted", {
         error: "repo_not_granted",
         detail:
           `This connection's installation grant does not include '${input.repo}', or the App lacks ` +
@@ -498,7 +553,7 @@ async function prOpen(env: Env, props: GrantProps, ctx: ExecutionContext, input:
       draft: input.draft ?? false,
     }),
   });
-  if (!prRes.ok) return refusal(prRes, "open pull request");
+  if (!prRes.ok) return refusal(audit, prRes, "open pull request");
   const pr = (await prRes.json()) as { number: number; html_url: string; draft: boolean };
 
   if (env.OPERATOR_LOGIN) {
@@ -506,19 +561,10 @@ async function prOpen(env: Env, props: GrantProps, ctx: ExecutionContext, input:
       method: "POST",
       body: JSON.stringify({ assignees: [env.OPERATOR_LOGIN] }),
     });
-    if (!assignRes.ok) return refusal(assignRes, "assign operator to pull request");
+    if (!assignRes.ok) return refusal(audit, assignRes, "assign operator to pull request");
   }
 
-  console.log(
-    JSON.stringify({
-      verb: "pr_open",
-      login: props.login,
-      repo: input.repo,
-      number: pr.number,
-      head: input.head,
-      base: input.base,
-    })
-  );
+  logAudit(audit, "landed", { number: pr.number, head: input.head, base: input.base });
 
   const payload = { number: pr.number, html_url: pr.html_url, draft: pr.draft };
   return { content: [{ type: "text" as const, text: JSON.stringify(payload, null, 2) }] };
