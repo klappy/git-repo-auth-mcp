@@ -24,6 +24,7 @@ import { checkMint, recordLiveToken, refundMint, scopeKey } from "./quota";
 import { emitMeterEvent } from "./billing";
 import { getDocs, listDocs } from "./docs";
 import { computeStats, isOperator } from "./stats";
+import { registerWriteVerbs } from "./write-verbs";
 import type { Env, GrantProps } from "./types";
 
 type AppAuth = ReturnType<typeof createAppAuth>;
@@ -211,6 +212,8 @@ function buildServer(env: Env, props: GrantProps, ctx: ExecutionContext): McpSer
       return { content: [{ type: "text" as const, text }] };
     }
   );
+
+  registerWriteVerbs(server, env, props, ctx);
 
   if (isOperator(env, props.login)) {
     server.registerTool(
