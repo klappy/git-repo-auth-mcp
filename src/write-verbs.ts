@@ -125,7 +125,7 @@ const filesShape = z
       content: z
         .string()
         .optional()
-        .describe("UTF-8 file content. Required in this slice (renames-without-content are git_move, not yet built)."),
+        .describe("UTF-8 file content. Required in this slice. For a pure rename with no content change, use git_move instead."),
       from_path: z
         .string()
         .optional()
@@ -175,12 +175,20 @@ async function gitPut(env: Env, props: GrantProps, ctx: ExecutionContext, input:
   }
   const [owner, name] = parts;
 
-  const railGate = mainRailGate(
-    audit,
-    input.branch,
-    input.files.map((f) => f.path)
-  );
+  const gated = input.files.flatMap((f) => (f.from_path ? [f.path, f.from_path] : [f.path]));
+  const railGate = mainRailGate(audit, input.branch, gated);
   if (railGate) return railGate;
+
+  for (const file of input.files) {
+    if (file.content === undefined) {
+      return refuse(
+        audit,
+        "missing_content",
+        `File '${file.path}' has no 'content'. git_put writes content directly; from_path deletes the old ` +
+          `path in the same commit. For a pure rename with no content change, use git_move instead.`
+      );
+    }
+  }
 
   const scope = await scopeKey(props.installationId, [name], { contents: "write" });
   const decision = await checkMint(env, props.login, scope);
@@ -282,14 +290,6 @@ async function gitPut(env: Env, props: GrantProps, ctx: ExecutionContext, input:
   for (const file of input.files) {
     if (file.from_path && file.from_path !== file.path) {
       treeEntries.push({ path: file.from_path, mode: "100644", type: "blob", sha: null });
-    }
-    if (file.content === undefined) {
-      return refuse(
-        audit,
-        "missing_content",
-        `File '${file.path}' has no 'content'. git_put writes content directly; a rename without ` +
-          `content edits is git_move (not built in this slice).`
-      );
     }
     const blobRes = await gh(token, `/repos/${owner}/${name}/git/blobs`, {
       method: "POST",

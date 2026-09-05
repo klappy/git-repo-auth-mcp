@@ -28,3 +28,4 @@
 - Wrote `docs/reviews/2026-09-05-write-verbs.md`: what changed, why (ticket + the 4th Cowork casualty), how proven (dispatcher-verified 72/9/tsc-clean), the four slice-3 validation findings folded in, what remains (live no-sources Cowork proof owed to dispatcher; the `src/docs.ts` registration gap above), rollback = revert.
 - CHANGELOG Unreleased line added for this doc.
 - docs-truth slice: write-verbs.md corrected (rail gate, attribution, draft, audit); review doc rewritten; CHANGELOG consolidated.
+- FIX slice: git_put main-rail gate now checks from_path too (not just path); missing_content check hoisted before mint; stale "not yet built" phrasing dropped from schema + refusal text; new test covers a non-rail from_path refused before any mint/GitHub call.

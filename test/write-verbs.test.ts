@@ -289,6 +289,31 @@ describe("git_put", () => {
     expect(authCalls).toHaveLength(0);
   });
 
+  it("refuses a non-rail from_path pushed directly to main, before any mint or GitHub call", async () => {
+    const env = stubEnv();
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input.toString();
+      const res = githubRoute(url, init);
+      if (!res) throw new Error(`unstubbed fetch: ${init?.method ?? "GET"} ${url}`);
+      return res;
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await gitPut(env, props, ctx, {
+      repo: "octocat/hello",
+      branch: "main",
+      message: "should not land",
+      files: [{ path: "journal/x.tsv", from_path: "src/foo.ts", content: "c" }],
+    });
+
+    expect("isError" in result ? result.isError : undefined).toBe(true);
+    const text = result.content[0].text as string;
+    expect(text).toContain("src/foo.ts");
+    expect(text).toContain("main");
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(authCalls).toHaveLength(0);
+  });
+
   it("allows a rail-path write directly on main", async () => {
     const env = stubEnv();
     const result = await gitPut(env, props, ctx, {
