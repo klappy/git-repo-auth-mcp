@@ -15,6 +15,9 @@ vi.mock("@octokit/auth-app", () => ({
       err.status = 404;
       throw err;
     }
+    if (opts.repositoryNames?.includes("mint-boom")) {
+      throw new Error("GitHub App installation temporarily unavailable");
+    }
     return { token: "s3cr3t-token", expiresAt: new Date(Date.now() + 3600_000).toISOString() };
   },
 }));
@@ -67,6 +70,15 @@ function githubRoute(url: string, init?: RequestInit): Response | undefined {
   if (url === "https://api.github.com/repos/octocat/hello/git/ref/heads/feature" && method === "GET") {
     return new Response("not found", { status: 404 });
   }
+  if (url === "https://api.github.com/repos/octocat/hello/git/ref/heads/topic-branch" && method === "GET") {
+    return Response.json({ object: { sha: "base-sha" } });
+  }
+  if (
+    url === "https://api.github.com/repos/octocat/hello/git/refs/heads/topic-branch" &&
+    method === "PATCH"
+  ) {
+    return Response.json({ ref: "refs/heads/topic-branch" });
+  }
   if (url === "https://api.github.com/repos/octocat/hello/git/refs" && method === "POST") {
     return Response.json({ ref: "refs/heads/feature" }, { status: 201 });
   }
@@ -103,6 +115,7 @@ function githubRoute(url: string, init?: RequestInit): Response | undefined {
       tree: [
         { path: "old/file.txt", mode: "100644", type: "blob", sha: "file-blob-sha" },
         { path: "other.txt", mode: "100644", type: "blob", sha: "other-sha" },
+        { path: "rail/1-ordered/x", mode: "100644", type: "blob", sha: "rail-blob-sha" },
       ],
     });
   }
@@ -250,6 +263,64 @@ describe("git_put", () => {
     expect(body.author).toEqual({ name: "octocat", email: "583231+octocat@users.noreply.github.com" });
     expect(body.committer).toEqual({ name: "octocat", email: "583231+octocat@users.noreply.github.com" });
   });
+
+  it("refuses a non-rail path pushed directly to main, before any mint or GitHub call", async () => {
+    const env = stubEnv();
+    const fetchMock = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input.toString();
+      const res = githubRoute(url, init);
+      if (!res) throw new Error(`unstubbed fetch: ${init?.method ?? "GET"} ${url}`);
+      return res;
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await gitPut(env, props, ctx, {
+      repo: "octocat/hello",
+      branch: "main",
+      message: "should not land",
+      files: [{ path: "docs/x.md", content: "hello" }],
+    });
+
+    expect("isError" in result ? result.isError : undefined).toBe(true);
+    const text = result.content[0].text as string;
+    expect(text).toContain("docs/x.md");
+    expect(text).toContain("main");
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(authCalls).toHaveLength(0);
+  });
+
+  it("allows a rail-path write directly on main", async () => {
+    const env = stubEnv();
+    const result = await gitPut(env, props, ctx, {
+      repo: "octocat/hello",
+      branch: "main",
+      message: "log journal entry",
+      files: [{ path: "journal/2026-09-05-x.tsv", content: "hello" }],
+    });
+
+    expect("isError" in result ? result.isError : undefined).toBeUndefined();
+    const payload = JSON.parse(result.content[0].text as string);
+    expect(payload.branch).toBe("main");
+  });
+
+  it("emits an audit row with outcome 'refused' and reason 'mint_error' before rethrowing a non-404/422 mint failure", async () => {
+    const env = stubEnv();
+    await expect(
+      gitPut(env, props, ctx, {
+        repo: "octocat/mint-boom",
+        branch: "feature",
+        message: "should blow up",
+        files: [{ path: "a.txt", content: "hello" }],
+      })
+    ).rejects.toThrow();
+
+    const logged = logSpy.mock.calls.map((c: unknown[]) => JSON.parse(String(c[0])));
+    const row = logged.find((l: { verb: string }) => l.verb === "git_put");
+    expect(row).toBeDefined();
+    expect(row.outcome).toBe("refused");
+    expect(row.reason).toBe("mint_error");
+    expect(JSON.stringify(row)).not.toContain("s3cr3t-token");
+  });
 });
 
 describe("git_move", () => {
@@ -270,7 +341,7 @@ describe("git_move", () => {
     const env = stubEnv();
     const result = await gitMove(env, props, ctx, {
       repo: "octocat/hello",
-      branch: "main",
+      branch: "topic-branch",
       from: "old/file.txt",
       to: "new/file.txt",
       message: "move file",
@@ -279,7 +350,7 @@ describe("git_move", () => {
     expect("isError" in result ? result.isError : undefined).toBeUndefined();
     const payload = JSON.parse(result.content[0].text as string);
     expect(payload.sha).toBe("new-commit-sha");
-    expect(payload.branch).toBe("main");
+    expect(payload.branch).toBe("topic-branch");
     expect(payload.from).toBe("old/file.txt");
     expect(payload.to).toBe("new/file.txt");
     expect(result.content[0].text).not.toContain("s3cr3t-token");
@@ -289,7 +360,7 @@ describe("git_move", () => {
     const env = stubEnv();
     const result = await gitMove(env, props, ctx, {
       repo: "octocat/hello",
-      branch: "main",
+      branch: "topic-branch",
       from: "ghost.txt",
       to: "new/ghost.txt",
       message: "should not land",
@@ -305,7 +376,7 @@ describe("git_move", () => {
     const env = stubEnv();
     await gitMove(env, props, ctx, {
       repo: "octocat/hello",
-      branch: "main",
+      branch: "topic-branch",
       from: "old/file.txt",
       to: "new/file.txt",
       message: "move file",
@@ -318,6 +389,38 @@ describe("git_move", () => {
       repositoryNames: ["hello"],
       permissions: { contents: "write" },
     });
+  });
+
+  it("refuses a non-rail path pushed directly to main, before any mint", async () => {
+    const env = stubEnv();
+    const result = await gitMove(env, props, ctx, {
+      repo: "octocat/hello",
+      branch: "main",
+      from: "old/file.txt",
+      to: "new/file.txt",
+      message: "should not land",
+    });
+
+    expect("isError" in result ? result.isError : undefined).toBe(true);
+    const text = result.content[0].text as string;
+    expect(text).toContain("old/file.txt");
+    expect(text).toContain("main");
+    expect(authCalls).toHaveLength(0);
+  });
+
+  it("allows a rail-path move directly on main", async () => {
+    const env = stubEnv();
+    const result = await gitMove(env, props, ctx, {
+      repo: "octocat/hello",
+      branch: "main",
+      from: "rail/1-ordered/x",
+      to: "rail/2-cooking/x",
+      message: "advance rail item",
+    });
+
+    expect("isError" in result ? result.isError : undefined).toBeUndefined();
+    const payload = JSON.parse(result.content[0].text as string);
+    expect(payload.branch).toBe("main");
   });
 });
 
@@ -389,5 +492,40 @@ describe("pr_open", () => {
       repositoryNames: ["hello"],
       permissions: { contents: "read", pull_requests: "write" },
     });
+  });
+
+  it("still reports the PR as landed, with an assignee_warning, when assigning the operator fails", async () => {
+    const env = stubEnv({ operatorLogin: "klappy" });
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    logSpy.mockClear();
+    fetchMock.mockImplementation(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url === "https://api.github.com/repos/octocat/hello/issues/7/assignees" && init?.method === "POST") {
+        return new Response("forbidden", { status: 403 });
+      }
+      const res = githubRoute(url, init);
+      if (!res) throw new Error(`unstubbed fetch: ${init?.method ?? "GET"} ${url}`);
+      return res;
+    });
+
+    const result = await prOpen(env, props, ctx, {
+      repo: "octocat/hello",
+      head: "feature",
+      base: "main",
+      title: "Add thing",
+      body: "Does the thing.",
+    });
+
+    expect("isError" in result ? result.isError : undefined).toBeUndefined();
+    const payload = JSON.parse(result.content[0].text as string);
+    expect(payload.number).toBe(7);
+    expect(payload.html_url).toBe("https://github.com/octocat/hello/pull/7");
+    expect(payload.assignee_warning).toBeDefined();
+
+    const logged = logSpy.mock.calls.map((c: unknown[]) => JSON.parse(String(c[0])));
+    const row = logged.find((l: { verb: string }) => l.verb === "pr_open");
+    expect(row.outcome).toBe("landed");
+    expect(row.assignee_warning).toBeDefined();
+    logSpy.mockRestore();
   });
 });

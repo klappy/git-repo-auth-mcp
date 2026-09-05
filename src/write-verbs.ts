@@ -55,6 +55,25 @@ function refuse(ctx: AuditCtx, reason: string, payload: unknown) {
   return typeof payload === "string" ? toolError(payload) : toolJsonError(payload);
 }
 
+/** main is always treated as the protected direct-write branch — this is a synchronous,
+ *  input-only check (no repo lookup) so it runs before any mint or GitHub call. */
+const MAIN_DIRECT_BRANCH = "main";
+const RAIL_PATH_RE = /^(rail|journal)\//;
+
+/** git_put and git_move share this gate: on the main-direct branch, every written path must
+ *  be a rail path. Anything else on main must go through a feature branch + pr_open. */
+function mainRailGate(ctx: AuditCtx, branch: string, paths: string[]) {
+  if (branch !== MAIN_DIRECT_BRANCH) return null;
+  const offending = paths.find((p) => !RAIL_PATH_RE.test(p));
+  if (offending === undefined) return null;
+  return refuse(
+    ctx,
+    "main_requires_rail_path",
+    `'${offending}' is not allowed as a direct write to '${branch}' — main-direct writes are limited ` +
+      `to rail paths ('rail/**', 'journal/**'). Write to a feature branch and open a pull request instead.`
+  );
+}
+
 async function gh(token: string, path: string, init?: RequestInit): Promise<Response> {
   return fetch(`https://api.github.com${path}`, {
     ...init,
@@ -156,6 +175,13 @@ async function gitPut(env: Env, props: GrantProps, ctx: ExecutionContext, input:
   }
   const [owner, name] = parts;
 
+  const railGate = mainRailGate(
+    audit,
+    input.branch,
+    input.files.map((f) => f.path)
+  );
+  if (railGate) return railGate;
+
   const scope = await scopeKey(props.installationId, [name], { contents: "write" });
   const decision = await checkMint(env, props.login, scope);
   if (!decision.ok) {
@@ -192,6 +218,7 @@ async function gitPut(env: Env, props: GrantProps, ctx: ExecutionContext, input:
           `permission) in the GitHub App installation settings.`,
       });
     }
+    logAudit(audit, "refused", { reason: "mint_error" });
     throw err;
   }
 
@@ -337,6 +364,9 @@ async function gitMove(env: Env, props: GrantProps, ctx: ExecutionContext, input
   }
   const [owner, name] = parts;
 
+  const railGate = mainRailGate(audit, input.branch, [input.from, input.to]);
+  if (railGate) return railGate;
+
   const scope = await scopeKey(props.installationId, [name], { contents: "write" });
   const decision = await checkMint(env, props.login, scope);
   if (!decision.ok) {
@@ -373,6 +403,7 @@ async function gitMove(env: Env, props: GrantProps, ctx: ExecutionContext, input
           `permission) in the GitHub App installation settings.`,
       });
     }
+    logAudit(audit, "refused", { reason: "mint_error" });
     throw err;
   }
 
@@ -474,7 +505,7 @@ const prOpenInputShape = {
   base: z.string().describe("Branch the PR merges into."),
   title: z.string().describe("Pull request title."),
   body: z.string().describe("Pull request description."),
-  draft: z.boolean().optional().describe("Open as a draft PR. Default false."),
+  draft: z.boolean().optional().describe("Open as a draft PR. Default true."),
 };
 
 type PrOpenInput = {
@@ -533,6 +564,7 @@ async function prOpen(env: Env, props: GrantProps, ctx: ExecutionContext, input:
           `permission) in the GitHub App installation settings.`,
       });
     }
+    logAudit(audit, "refused", { reason: "mint_error" });
     throw err;
   }
 
@@ -550,23 +582,36 @@ async function prOpen(env: Env, props: GrantProps, ctx: ExecutionContext, input:
       head: input.head,
       base: input.base,
       body: input.body,
-      draft: input.draft ?? false,
+      draft: input.draft ?? true,
     }),
   });
   if (!prRes.ok) return refusal(audit, prRes, "open pull request");
   const pr = (await prRes.json()) as { number: number; html_url: string; draft: boolean };
 
+  let assigneeWarning: string | undefined;
   if (env.OPERATOR_LOGIN) {
     const assignRes = await gh(token, `/repos/${owner}/${name}/issues/${pr.number}/assignees`, {
       method: "POST",
       body: JSON.stringify({ assignees: [env.OPERATOR_LOGIN] }),
     });
-    if (!assignRes.ok) return refusal(audit, assignRes, "assign operator to pull request");
+    if (!assignRes.ok) {
+      assigneeWarning = `PR #${pr.number} opened, but assigning '${env.OPERATOR_LOGIN}' failed (status ${assignRes.status}).`;
+    }
   }
 
-  logAudit(audit, "landed", { number: pr.number, head: input.head, base: input.base });
+  logAudit(audit, "landed", {
+    number: pr.number,
+    head: input.head,
+    base: input.base,
+    ...(assigneeWarning ? { assignee_warning: assigneeWarning } : {}),
+  });
 
-  const payload = { number: pr.number, html_url: pr.html_url, draft: pr.draft };
+  const payload = {
+    number: pr.number,
+    html_url: pr.html_url,
+    draft: pr.draft,
+    ...(assigneeWarning ? { assignee_warning: assigneeWarning } : {}),
+  };
   return { content: [{ type: "text" as const, text: JSON.stringify(payload, null, 2) }] };
 }
 
@@ -640,9 +685,12 @@ export function registerWriteVerbs(
         `pull_requests:write' token server-side and calls the GitHub REST API itself, so this works ` +
         `even when the calling sandbox cannot reach api.github.com directly. When an operator login is ` +
         `configured for this service, the operator is assigned to the PR for visibility — this tool ` +
-        `assigns the operator, never requests review. Your grant, not wider: the repo must be inside ` +
-        `this connection's installation grant with 'pull_requests' permission, or the call is refused ` +
-        `by name — never silently dropped. The token itself never appears in the response.`,
+        `assigns the operator, never requests review. Opens as a draft by default (set 'draft: false' ` +
+        `for a ready-for-review PR). If the PR is created but assigning the operator fails, this still ` +
+        `reports success with an 'assignee_warning' field — the PR exists and is never hidden behind a ` +
+        `refusal. Your grant, not wider: the repo must be inside this connection's installation grant ` +
+        `with 'pull_requests' permission, or the call is refused by name — never silently dropped. The ` +
+        `token itself never appears in the response.`,
       inputSchema: prOpenInputShape,
     },
     async (input) => prOpen(env, props, ctx, input)
