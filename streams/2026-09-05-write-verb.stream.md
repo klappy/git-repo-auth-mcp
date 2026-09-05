@@ -18,3 +18,12 @@
 - Tests appended to `test/write-verbs.test.ts`: `git_move` happy path (rename, one commit, sha returned) and refusal on a nonexistent `from`; `pr_open` happy path (assignee call observed via the fetch mock's call list, no `requested_reviewers` URL ever hit) and refusal when the mint 404s for `no-grant`. All token-absence assertions carried over.
 - `npx tsc --noEmit` clean; `npx vitest run` — 67 passed, 9 skipped (up from 63 passed at end of slice 1).
 - `docs/write-verbs.md` and the review doc intentionally not touched — slice 3.
+
+# 2026-09-05 — gitauth-write-verb, slice 4: docs
+
+- Continuation on the same branch (`dish/2026-09-05-gitauth-write-verb` @ 074c51b, slices 1–3 PASS: 72 passed | 9 skipped, tsc clean, per dispatcher). Docs-only slice, hard 10-minute limit — no `src/` or `test/` changes.
+- Read `src/write-verbs.ts` tool descriptions, input/output shapes, and refusal reasons; `src/docs.ts` (the `docs` tool's `DOCS` registry — bundled `.md` import + catalog entry per doc); `governance/external/identity-and-attribution.md` (the noreply-email attribution mechanism these verbs reuse).
+- Wrote `docs/write-verbs.md`: why (the Cowork no-sources case — a sandbox proxy-walled off `api.github.com`), input/output tables for all three verbs, the scope law (repo-scoped mint, refusal names the missing repo/permission, a 403/404 is never a landing), attribution (live `GET /users/{login}` lookup, never typed/cached), audit line JSON shape (verb/login/repo/outcome plus per-verb fields, token never present), what's explicitly not supported (force push, protected-`main` bypass, merging, requesting review), and quota (one mint per call, same tiers as `github_token`).
+- **Registration gap, flagged rather than silently closed or silently skipped**: `src/docs.ts`'s `DOCS` registry is how the `docs` tool actually resolves a query to a bundled file — without an entry there, `docs/write-verbs.md` exists but a "write verbs" query won't find it. That edit lives in `src/`, which this slice's hard limit puts out of scope. Left unregistered on purpose and called out in the review doc's "what remains" rather than quietly patching `src/docs.ts` under a "docs only" banner.
+- Wrote `docs/reviews/2026-09-05-write-verbs.md`: what changed, why (ticket + the 4th Cowork casualty), how proven (dispatcher-verified 72/9/tsc-clean), the four slice-3 validation findings folded in, what remains (live no-sources Cowork proof owed to dispatcher; the `src/docs.ts` registration gap above), rollback = revert.
+- CHANGELOG Unreleased line added for this doc.
