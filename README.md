@@ -35,6 +35,13 @@ A Cloudflare Worker that bridges MCP's OAuth to GitHub App installation tokens. 
 3. Zero installations → the user is sent to install the app on their repos. One → bound automatically. Several → a picker.
 4. The grant is bound to that installation ID. Every later `github_token` call mints for that installation only. **GitHub enforces the walls**: a token minted for one installation physically cannot touch another's repositories.
 
+> **2026-09-05 — interim lockdown.** New connections are refused for every GitHub login
+> except the operator's, while an installation-escalation finding is remediated. The
+> "zero/one/many installations" flow above still describes how connecting works for the
+> operator; everyone else's `/callback` and `github_token` mint are refused with an
+> explicit reason instead of binding or minting. Details: `CHANGELOG.md`,
+> `docs/reviews/2026-09-05-klappy-only-lockdown.md`.
+
 ## Security model — read before trusting
 
 **What is never stored.** No GitHub tokens, ever. Installation tokens are minted on demand and die within the hour. The GitHub user token from login is used for two GET requests and discarded. The worker's state is: its own OAuth grants (hashed, in KV) and 10-minute pending records during account selection.
