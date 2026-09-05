@@ -48,8 +48,9 @@ async function distinctLogins(kv: KVNamespace, prefix: string): Promise<Set<stri
 }
 
 /** The operator-owned exclusion set: OPERATOR_LOGIN plus any TEST_LOGINS.
- *  Configured, never hardcoded. */
-function operatorOwnedLogins(env: Env): Set<string> {
+ *  Configured, never hardcoded. Also the interim klappy-only lockdown's
+ *  allow-list (see isOperatorOwned) — one config source, two consumers. */
+export function operatorOwnedLogins(env: Env): Set<string> {
   const set = new Set<string>();
   if (env.OPERATOR_LOGIN) set.add(env.OPERATOR_LOGIN);
   if (env.TEST_LOGINS) {
@@ -156,4 +157,17 @@ export async function computeStats(env: Env): Promise<OperatorStats> {
 /** The stats surface exists only for the configured operator. */
 export function isOperator(env: Env, login: string): boolean {
   return Boolean(env.OPERATOR_LOGIN) && login === env.OPERATOR_LOGIN;
+}
+
+/** Interim security lockdown (2026-09-05, incident: gitauth installation
+ *  escalation — one shared repo let an outside login bind the whole operator
+ *  installation). Every non-operator-owned login is refused at connect time
+ *  and at mint time, so grants already sitting in KV for outside logins die
+ *  immediately with no KV migration needed. Fail closed: an unconfigured
+ *  OPERATOR_LOGIN allows no one, rather than opening the gate.
+ *  Reuses the same OPERATOR_LOGIN + TEST_LOGINS set operator-observability.md
+ *  already defines — not a second copy of the config. Superseded by the
+ *  ruled v1.0.0 user-token shape; see docs/reviews/2026-09-05-klappy-only-lockdown.md. */
+export function isOperatorOwned(env: Env, login: string): boolean {
+  return operatorOwnedLogins(env).has(login);
 }
