@@ -266,6 +266,264 @@ async function gitPut(env: Env, props: GrantProps, ctx: ExecutionContext, input:
   return { content: [{ type: "text" as const, text: JSON.stringify(payload, null, 2) }] };
 }
 
+const gitMoveInputShape = {
+  repo: z.string().describe('"owner/name" — must be within this connection\'s installation grant.'),
+  branch: z.string().describe("Branch the move commits onto. Must already exist."),
+  from: z
+    .string()
+    .describe("Path to move. End with '/' to move every entry under that directory."),
+  to: z.string().describe("Destination path (mirror trailing '/' for a directory move)."),
+  message: z.string().describe("Commit message."),
+};
+
+type GitMoveInput = {
+  repo: string;
+  branch: string;
+  from: string;
+  to: string;
+  message: string;
+};
+
+async function gitMove(env: Env, props: GrantProps, ctx: ExecutionContext, input: GitMoveInput) {
+  const parts = input.repo.split("/");
+  if (parts.length !== 2 || !parts[0] || !parts[1]) {
+    return toolError(`'repo' must be "owner/name", got '${input.repo}'.`);
+  }
+  const [owner, name] = parts;
+
+  const scope = await scopeKey(props.installationId, [name], { contents: "write" });
+  const decision = await checkMint(env, props.login, scope);
+  if (!decision.ok) {
+    return toolJsonError({
+      error: "quota_exceeded",
+      limit_hit: decision.limit_hit,
+      tier: decision.tier,
+      ...(decision.window_reset_at ? { window_reset_at: decision.window_reset_at } : {}),
+      ...(decision.upgrade_url ? { upgrade_url: decision.upgrade_url } : {}),
+      governance_source: decision.governance_source,
+    });
+  }
+
+  const auth = getAppAuth(env);
+  let minted: InstallationAccessTokenAuthentication;
+  try {
+    minted = (await auth({
+      type: "installation",
+      installationId: props.installationId,
+      repositoryNames: [name],
+      permissions: { contents: "write" },
+    })) as InstallationAccessTokenAuthentication;
+  } catch (err) {
+    if (decision.charge) {
+      ctx.waitUntil(refundMint(env, props.login, decision.charge));
+    }
+    const status = (err as { status?: number } | null)?.status;
+    if (status === 404 || status === 422) {
+      return toolJsonError({
+        error: "repo_not_granted",
+        detail:
+          `This connection's installation grant does not include '${input.repo}', or the App lacks ` +
+          `'contents:write' on it. Your grant, not wider — request access to that repo (or the ` +
+          `permission) in the GitHub App installation settings.`,
+      });
+    }
+    throw err;
+  }
+
+  if (!decision.cached) {
+    ctx.waitUntil(recordLiveToken(env, props.login, scope, minted.expiresAt));
+    ctx.waitUntil(emitMeterEvent(env, props.login));
+  }
+
+  const token = minted.token;
+
+  const branchRefRes = await gh(
+    token,
+    `/repos/${owner}/${name}/git/ref/heads/${encodeURIComponent(input.branch)}`
+  );
+  if (!branchRefRes.ok) return refusal(branchRefRes, `resolve branch '${input.branch}'`);
+  const branchRef = (await branchRefRes.json()) as { object: { sha: string } };
+  const parentSha = branchRef.object.sha;
+
+  const parentCommitRes = await gh(token, `/repos/${owner}/${name}/git/commits/${parentSha}`);
+  if (!parentCommitRes.ok) return refusal(parentCommitRes, "read parent commit");
+  const parentCommit = (await parentCommitRes.json()) as { tree: { sha: string } };
+
+  const fullTreeRes = await gh(
+    token,
+    `/repos/${owner}/${name}/git/trees/${parentCommit.tree.sha}?recursive=1`
+  );
+  if (!fullTreeRes.ok) return refusal(fullTreeRes, "read tree");
+  const fullTree = (await fullTreeRes.json()) as {
+    tree: Array<{ path: string; mode: string; type: string; sha: string }>;
+  };
+
+  const isDirMove = input.from.endsWith("/");
+  const matches = isDirMove
+    ? fullTree.tree.filter((e) => e.type === "blob" && e.path.startsWith(input.from))
+    : fullTree.tree.filter((e) => e.type === "blob" && e.path === input.from);
+
+  if (matches.length === 0) {
+    return toolError(
+      `'from' path '${input.from}' was not found in branch '${input.branch}' — nothing to move.`
+    );
+  }
+
+  type TreeEntry = { path: string; mode: string; type: "blob"; sha: string | null };
+  const treeEntries: TreeEntry[] = [];
+  for (const entry of matches) {
+    const destPath = isDirMove ? input.to + entry.path.slice(input.from.length) : input.to;
+    treeEntries.push({ path: entry.path, mode: entry.mode, type: "blob", sha: null });
+    treeEntries.push({ path: destPath, mode: entry.mode, type: "blob", sha: entry.sha });
+  }
+
+  const treeRes = await gh(token, `/repos/${owner}/${name}/git/trees`, {
+    method: "POST",
+    body: JSON.stringify({ base_tree: parentCommit.tree.sha, tree: treeEntries }),
+  });
+  if (!treeRes.ok) return refusal(treeRes, "create tree");
+  const tree = (await treeRes.json()) as { sha: string };
+
+  const commitRes = await gh(token, `/repos/${owner}/${name}/git/commits`, {
+    method: "POST",
+    body: JSON.stringify({ message: input.message, tree: tree.sha, parents: [parentSha] }),
+  });
+  if (!commitRes.ok) return refusal(commitRes, "create commit");
+  const commit = (await commitRes.json()) as { sha: string };
+
+  const updateRes = await gh(
+    token,
+    `/repos/${owner}/${name}/git/refs/heads/${encodeURIComponent(input.branch)}`,
+    { method: "PATCH", body: JSON.stringify({ sha: commit.sha, force: false }) }
+  );
+  if (!updateRes.ok) return refusal(updateRes, `update branch '${input.branch}'`);
+
+  console.log(
+    JSON.stringify({
+      verb: "git_move",
+      login: props.login,
+      repo: input.repo,
+      branch: input.branch,
+      from: input.from,
+      to: input.to,
+      sha: commit.sha,
+    })
+  );
+
+  const payload = { sha: commit.sha, branch: input.branch, from: input.from, to: input.to };
+  return { content: [{ type: "text" as const, text: JSON.stringify(payload, null, 2) }] };
+}
+
+const prOpenInputShape = {
+  repo: z.string().describe('"owner/name" — must be within this connection\'s installation grant.'),
+  head: z.string().describe("Branch containing the changes (e.g. 'my-feature' or 'owner:my-feature' for a fork)."),
+  base: z.string().describe("Branch the PR merges into."),
+  title: z.string().describe("Pull request title."),
+  body: z.string().describe("Pull request description."),
+  draft: z.boolean().optional().describe("Open as a draft PR. Default false."),
+};
+
+type PrOpenInput = {
+  repo: string;
+  head: string;
+  base: string;
+  title: string;
+  body: string;
+  draft?: boolean;
+};
+
+async function prOpen(env: Env, props: GrantProps, ctx: ExecutionContext, input: PrOpenInput) {
+  const parts = input.repo.split("/");
+  if (parts.length !== 2 || !parts[0] || !parts[1]) {
+    return toolError(`'repo' must be "owner/name", got '${input.repo}'.`);
+  }
+  const [owner, name] = parts;
+
+  const scope = await scopeKey(props.installationId, [name], {
+    contents: "read",
+    pull_requests: "write",
+  });
+  const decision = await checkMint(env, props.login, scope);
+  if (!decision.ok) {
+    return toolJsonError({
+      error: "quota_exceeded",
+      limit_hit: decision.limit_hit,
+      tier: decision.tier,
+      ...(decision.window_reset_at ? { window_reset_at: decision.window_reset_at } : {}),
+      ...(decision.upgrade_url ? { upgrade_url: decision.upgrade_url } : {}),
+      governance_source: decision.governance_source,
+    });
+  }
+
+  const auth = getAppAuth(env);
+  let minted: InstallationAccessTokenAuthentication;
+  try {
+    minted = (await auth({
+      type: "installation",
+      installationId: props.installationId,
+      repositoryNames: [name],
+      permissions: { contents: "read", pull_requests: "write" },
+    })) as InstallationAccessTokenAuthentication;
+  } catch (err) {
+    if (decision.charge) {
+      ctx.waitUntil(refundMint(env, props.login, decision.charge));
+    }
+    const status = (err as { status?: number } | null)?.status;
+    if (status === 404 || status === 422) {
+      return toolJsonError({
+        error: "repo_not_granted",
+        detail:
+          `This connection's installation grant does not include '${input.repo}', or the App lacks ` +
+          `'pull_requests:write' on it. Your grant, not wider — request access to that repo (or the ` +
+          `permission) in the GitHub App installation settings.`,
+      });
+    }
+    throw err;
+  }
+
+  if (!decision.cached) {
+    ctx.waitUntil(recordLiveToken(env, props.login, scope, minted.expiresAt));
+    ctx.waitUntil(emitMeterEvent(env, props.login));
+  }
+
+  const token = minted.token;
+
+  const prRes = await gh(token, `/repos/${owner}/${name}/pulls`, {
+    method: "POST",
+    body: JSON.stringify({
+      title: input.title,
+      head: input.head,
+      base: input.base,
+      body: input.body,
+      draft: input.draft ?? false,
+    }),
+  });
+  if (!prRes.ok) return refusal(prRes, "open pull request");
+  const pr = (await prRes.json()) as { number: number; html_url: string; draft: boolean };
+
+  if (env.OPERATOR_LOGIN) {
+    const assignRes = await gh(token, `/repos/${owner}/${name}/issues/${pr.number}/assignees`, {
+      method: "POST",
+      body: JSON.stringify({ assignees: [env.OPERATOR_LOGIN] }),
+    });
+    if (!assignRes.ok) return refusal(assignRes, "assign operator to pull request");
+  }
+
+  console.log(
+    JSON.stringify({
+      verb: "pr_open",
+      login: props.login,
+      repo: input.repo,
+      number: pr.number,
+      head: input.head,
+      base: input.base,
+    })
+  );
+
+  const payload = { number: pr.number, html_url: pr.html_url, draft: pr.draft };
+  return { content: [{ type: "text" as const, text: JSON.stringify(payload, null, 2) }] };
+}
+
 export function registerWriteVerbs(
   server: McpServer,
   env: Env,
@@ -295,6 +553,54 @@ export function registerWriteVerbs(
     },
     async (input) => gitPut(env, props, ctx, input)
   );
+
+  server.registerTool(
+    "git_move",
+    {
+      title: "Move or rename a path",
+      annotations: {
+        title: "Move or rename a path",
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: true,
+      },
+      description:
+        `Move or rename a path within a branch — one commit, tree-level rename (the blob content is ` +
+        `never re-uploaded, just relinked at the new path). 'from' must already exist on 'branch'; end ` +
+        `it with '/' to move every entry under that directory in a single commit. The Worker mints a ` +
+        `'contents:write' token server-side and calls the GitHub REST API itself, so this works even ` +
+        `when the calling sandbox cannot reach api.github.com directly. Your grant, not wider: the repo ` +
+        `must be inside this connection's installation grant, or the call is refused by name — never ` +
+        `silently dropped. The token itself never appears in the response.`,
+      inputSchema: gitMoveInputShape,
+    },
+    async (input) => gitMove(env, props, ctx, input)
+  );
+
+  server.registerTool(
+    "pr_open",
+    {
+      title: "Open a pull request",
+      annotations: {
+        title: "Open a pull request",
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: true,
+      },
+      description:
+        `Open a pull request from 'head' into 'base' — the Worker mints a 'contents:read, ` +
+        `pull_requests:write' token server-side and calls the GitHub REST API itself, so this works ` +
+        `even when the calling sandbox cannot reach api.github.com directly. When an operator login is ` +
+        `configured for this service, the operator is assigned to the PR for visibility — this tool ` +
+        `assigns the operator, never requests review. Your grant, not wider: the repo must be inside ` +
+        `this connection's installation grant with 'pull_requests' permission, or the call is refused ` +
+        `by name — never silently dropped. The token itself never appears in the response.`,
+      inputSchema: prOpenInputShape,
+    },
+    async (input) => prOpen(env, props, ctx, input)
+  );
 }
 
-export const __testables = { gitPut };
+export const __testables = { gitPut, gitMove, prOpen };
