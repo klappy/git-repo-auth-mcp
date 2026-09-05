@@ -1,6 +1,6 @@
 # Write Verbs — Landing Work Through the Token, Not the Sandbox
 
-*Drafted 2026-09-05. Served via the `docs` tool.*
+*Drafted 2026-09-05. Will be served by the `docs` tool once registered in `src/docs.ts`; until then, read it in the repo.*
 
 ## Why
 
@@ -51,13 +51,14 @@ Tree-level rename: the blob content is never re-uploaded, only relinked at the n
 | `base` | string | Branch the PR merges into |
 | `title` | string | PR title |
 | `body` | string | PR description |
-| `draft` | boolean, optional | Default `false` |
+| `draft` | boolean, optional | Default `true` |
 
 | Output | Type | Notes |
 |---|---|---|
 | `number` | number | PR number |
 | `html_url` | string | Link to the PR |
 | `draft` | boolean | Whether it opened as a draft |
+| `assignee_warning` | string, optional | Present only if the PR landed but assigning the operator failed |
 
 ## Scope law: your grant, not wider
 
@@ -70,7 +71,7 @@ The installation grant is the hard ceiling GitHub enforces underneath that mint.
 
 ## Attribution
 
-Commits made by these verbs are authored and committed as the operator, not the App's bot identity — same mechanism as `governance/external/identity-and-attribution.md`. Before writing, the Worker resolves the operator's numeric id live via `GET /users/{login}` using the just-minted token, then stamps both:
+Author and committer are the CONNECTED login's `{id}+{login}@users.noreply.github.com`, id read live from GitHub per call (the ARS service path connects as `ARS_SERVICE_ACCOUNT`); if the lookup fails the verb refuses rather than committing as the bot.
 
 ```
 author.email    = committer.email = {id}+{login}@users.noreply.github.com
@@ -89,12 +90,12 @@ Every call — landed or refused — logs exactly one JSON line, and the token i
 {"verb": "git_put", "login": "...", "repo": "owner/name", "outcome": "landed", "branch": "...", "paths": ["..."], "sha": "..."}
 ```
 
-`verb`, `login`, `repo`, and `outcome` (`"landed"` or `"refused"`) are present on every line. The remaining fields vary by verb and outcome: `git_put` adds `branch`, `paths`, `sha` on landing; `git_move` adds `branch`, `from`, `to`, `sha`; `pr_open` adds `number`, `head`, `base`. A refused call adds `reason` (e.g. `repo_not_granted`, `identity_resolution_failed`, `quota_exceeded`, `from_not_found`) in place of the landing fields.
+`verb`, `login`, `repo`, and `outcome` (`"landed"` or `"refused"`) are present on every line. The remaining fields vary by verb and outcome: `git_put` adds `branch`, `paths`, `sha` on landing; `git_move` adds `branch`, `from`, `to`, `sha`; `pr_open` adds `number`, `head`, `base`. A refused call adds `reason` (e.g. `repo_not_granted`, `identity_resolution_failed`, `quota_exceeded`, `from_not_found`, `mint_error`) in place of the landing fields. A mint failure logs `reason: "mint_error"` with no error body and no token.
 
 ## Not supported
 
 - **Force push** — every ref update is a fast-forward (`force: false`); a write verb never rewrites history on a branch.
-- **Pushing to a protected `main`** outside whatever rail paths that protection allows — GitHub's branch protection is enforced normally underneath these calls, not bypassed by them.
+- **Direct writes to `main`** are refused unless every written path is under `rail/` or `journal/` (refusal reason `main_requires_rail_path`, checked before any mint or GitHub call, for both `git_put` and `git_move`). Everything else goes to a feature branch and `pr_open`. Merging is the expeditor's, never a verb's.
 - **Merging a pull request** — these verbs open PRs, they don't merge them. Merging is an expeditor action.
 - **Requesting review** — `pr_open` will assign the configured operator for visibility, but never calls the requested-reviewers endpoint. Ask for a review deliberately, outside these verbs, when one is actually wanted.
 
