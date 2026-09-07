@@ -112,7 +112,7 @@ export class AccountGrantObject implements DurableObject {
       }
       if (url.pathname === '/disconnect' && request.method === 'POST') {
         if (request.headers.get('Origin') !== new URL(this.env.ACCOUNT_ISSUER).origin) throw new AccessDenied();
-        await this.vault.revoke(); return new Response(null, { status: 204, headers: { 'Cache-Control': 'no-store' } });
+        return Response.json({ generation: await this.vault.revoke() }, { headers: { 'Cache-Control': 'no-store' } });
       }
       throw new AccessDenied();
     } catch (error) { return errorResponse(error); }

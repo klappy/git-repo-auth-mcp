@@ -33,7 +33,8 @@ export class GrantVault {
   async revoke() {
     for (;;) {
       const old = await this.store.get();
-      if (await this.store.compareAndSwap(old?.generation, { generation: (old?.generation ?? 1) + 1, epoch: (old?.generation ?? 1) + 1, status: 'revoked' }, old?.status)) return;
+      const generation = (old?.generation ?? 1) + 1;
+      if (await this.store.compareAndSwap(old?.generation, { generation, epoch: generation, status: 'revoked' }, old?.status)) return generation;
     }
   }
   async generation(expectedId: number, assertionGeneration: number) {

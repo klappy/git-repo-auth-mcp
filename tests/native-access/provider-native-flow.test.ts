@@ -22,7 +22,7 @@ it('actual Workers OAuth provider consent→PKCE token→opaque protected sessio
     const session=await worker.fetch(h.request('/connector/session',undefined,{Authorization:`Bearer ${token.access_token}`}),h.env,ctx);expect(session.status).toBe(200);const value=await session.json() as {assertion:string};expect(await verifySession(value.assertion,h.service,h.a.policy)).toEqual(context);
     const read=await worker.fetch(h.request('/read',input,{Authorization:`Bearer ${value.assertion}`}),h.env,ctx);expect(read.status).toBe(200);expect(JSON.stringify(await read.json())).not.toContain('INERT_');
     expect((await worker.fetch(h.request('/connector/session',undefined,{Authorization:'Bearer wrong'}),h.env,ctx)).status).toBe(401);
-    expect((await accountWorker.fetch(h.request('/disconnect'),h.env)).status).toBe(204);
+    const disconnected=await accountWorker.fetch(h.request('/disconnect'),h.env);expect(disconnected.status).toBe(200);expect(await disconnected.json()).toEqual({generation:2});
     const reauthenticated=await h.a.user({grant_generation:2});
     const reconnectStart=await accountWorker.fetch(h.request('/oauth/start?purpose=repository',undefined,{Authorization:`Bearer ${reauthenticated}`}),h.env);
     const reconnectAuth=new URL((await reconnectStart.json() as {authorizationUrl:string}).authorizationUrl);

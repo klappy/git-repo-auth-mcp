@@ -16,7 +16,7 @@ it('actual Worker/DO assembly runs PKCE callback, custody, renewal, signed read 
     expect(JSON.stringify(h.data.get('grant'))).not.toContain('INERT_');
     const renewed=await accountWorker.fetch(h.request('/session/renew'),h.env);expect(renewed.status).toBe(200);const renewal=await renewed.json() as {assertion:string};expect(await verifySession(renewal.assertion,h.service,h.a.policy)).toEqual(context);
     const response=await accountWorker.fetch(h.request('/read',input,{Authorization:`Bearer ${renewal.assertion}`}),h.env);expect(response.status).toBe(200);const result=await response.json();expect(result).toMatchObject({subject:'acct-A',repository:{id:2001},generation:1,intent:{path:'docs/cookbook.md'}});expect(JSON.stringify(result)).not.toContain('INERT_');
-    expect((await accountWorker.fetch(h.request('/disconnect'),h.env)).status).toBe(204);
+    const disconnected=await accountWorker.fetch(h.request('/disconnect'),h.env);expect(disconnected.status).toBe(200);expect(await disconnected.json()).toEqual({generation:2});
     const before=h.repo.calls.length;expect((await accountWorker.fetch(h.request('/read',input),h.env)).status).toBe(403);expect(h.repo.calls).toHaveLength(before);
     expect((await accountWorker.fetch(h.request('/session/renew'),h.env)).status).toBe(403);
   } finally {vi.unstubAllGlobals();}
