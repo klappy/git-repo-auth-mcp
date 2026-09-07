@@ -14,7 +14,11 @@ export function validateRead(input: BrokerReadRequest): void {
   if (input.action === 'read_blob' && !input.path) throw new AccessDenied();
 }
 export class GitHubReads {
-  constructor(private transport: typeof fetch, private maxBytes = 8 * 1024 * 1024) {}
+  private transport: typeof fetch;
+  constructor(transport: typeof fetch, private maxBytes = 8 * 1024 * 1024) {
+    // Native Workers fetch requires its global receiver, not the class instance.
+    this.transport = (...args) => transport(...args);
+  }
   private async request(url: string, token?: string, binary = false, archivePath?: string): Promise<unknown> {
     const target = new URL(url);
     if (target.origin !== 'https://api.github.com' && !(binary && target.origin === 'https://codeload.github.com')) throw new AccessDenied();

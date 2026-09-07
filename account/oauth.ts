@@ -28,7 +28,20 @@ export function validateScopes(scope: unknown, purpose: OAuthTransaction['purpos
 }
 export class GitHubOAuth {
   private client: oauth.Client;
-  constructor(private config: OAuthConfig) {
+  private config: OAuthConfig;
+  constructor(config: OAuthConfig) {
+    const transport = config.fetch;
+    // Preserve native fetch invocation for /user and maintained OAuth exchanges.
+    this.config = { ...config, fetch: async (input, init) => {
+      // workerd supports follow/manual only. Preserve requested no-follow semantics.
+      const rejectRedirect = init?.redirect === 'error';
+      const response = await transport(input, rejectRedirect ? { ...init, redirect: 'manual' } : init);
+      if (rejectRedirect && response.status >= 300 && response.status < 400) {
+        await response.body?.cancel();
+        throw new AccessDenied();
+      }
+      return response;
+    } };
     if (new URL(config.callback).protocol !== 'https:') throw new AccessDenied();
     this.client = { client_id: config.clientId };
   }
