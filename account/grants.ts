@@ -3,6 +3,8 @@ import { AccessDenied } from './session';
 import type { GitHubOAuth, OAuthTransaction, ProviderCredential, TransactionStore } from './oauth';
 
 export interface GrantRecord { generation: number; epoch: number; status: 'verified' | 'refreshing' | 'revoked'; encrypted?: string; }
+export interface BrowserGrantProof { handle: string; generation: number; accountEpoch: number; subject: string; githubId: number; }
+interface GrantCandidate { id: string; browser: BrowserGrantProof; expiresAt: number; expected: number | undefined; expectedStatus?: GrantRecord['status']; next: GrantRecord; }
 export interface AtomicStore {
   get(): Promise<GrantRecord | undefined>;
   compareAndSwap(expected: number | undefined, next: GrantRecord, expectedStatus?: GrantRecord['status']): Promise<boolean>;
@@ -29,6 +31,33 @@ export class GrantVault {
     const generation = prior ? prior.generation + 1 : 1;
     if (!await this.store.compareAndSwap(prior?.generation, { generation, epoch: generation, status: 'verified', encrypted: await this.encrypt(credential, generation) }, prior?.status)) throw new AccessDenied();
     return generation;
+  }
+  async prepare(credential: ProviderCredential, expectedGeneration: number, browser: BrowserGrantProof, storage: DurableObjectStorage) {
+    if (browser.subject !== this.subject || browser.githubId !== credential.githubId || !/^[a-f0-9]{64}$/.test(browser.handle) || !Number.isSafeInteger(browser.generation) || browser.generation < 1 || !Number.isSafeInteger(browser.accountEpoch) || browser.accountEpoch < 0) throw new AccessDenied();
+    const prior = await this.store.get();
+    if ((prior?.generation ?? 1) !== expectedGeneration || prior?.status === 'refreshing') throw new AccessDenied();
+    const generation = prior ? prior.generation + 1 : 1, id = crypto.randomUUID();
+    const candidate: GrantCandidate = { id, browser, expiresAt: Date.now() + 300_000, expected: prior?.generation, expectedStatus: prior?.status, next: { generation, epoch: generation, status: 'verified', encrypted: await this.encrypt(credential, generation) } };
+    // Separate staging key is never read by credential(), bootstrap(), current() or generation().
+    await storage.put('grant-candidate', await new CompactEncrypt(new TextEncoder().encode(JSON.stringify(candidate))).setProtectedHeader({ alg: 'dir', enc: 'A256GCM', typ: 'account-grant-candidate+jwe' }).encrypt(this.key));
+    return { candidateId: id, subject: this.subject };
+  }
+  async commitCandidate(id: string, browser: BrowserGrantProof, storage: DurableObjectStorage) {
+    if (!/^[a-f0-9-]{36}$/.test(id)) throw new AccessDenied();
+    const result = await storage.transaction(async tx => {
+      const key = 'grant-candidate', raw = await tx.get<string>(key);
+      if (!raw) return undefined;
+      const { plaintext, protectedHeader } = await compactDecrypt(raw, this.key, { keyManagementAlgorithms: ['dir'], contentEncryptionAlgorithms: ['A256GCM'] });
+      if (protectedHeader.typ !== 'account-grant-candidate+jwe') return undefined;
+      const candidate = JSON.parse(new TextDecoder().decode(plaintext)) as GrantCandidate;
+      if (candidate.id !== id) return undefined;
+      await tx.delete(key); // Burn this exact candidate; a stale id cannot delete its replacement.
+      const old = await tx.get<GrantRecord>('grant');
+      if (candidate.id !== id || candidate.expiresAt <= Date.now() || candidate.browser.subject !== this.subject || JSON.stringify(candidate.browser) !== JSON.stringify(browser) || old?.generation !== candidate.expected || old?.status !== candidate.expectedStatus) return undefined;
+      if ((await this.decrypt(candidate.next)).githubId !== browser.githubId) return undefined;
+      await tx.put('grant', candidate.next); return candidate.next.generation;
+    });
+    if (result === undefined) throw new AccessDenied(); return result;
   }
   async revoke() {
     for (;;) {

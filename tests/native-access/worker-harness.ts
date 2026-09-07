@@ -22,5 +22,5 @@ export async function harness() {
   const request=(path:string,body?:unknown,extra:Record<string,string>={})=>new Request('https://account.example.test'+path,{method:'POST',headers:{Authorization:`Bearer ${user}`,'X-Service-Authorization':`Bearer ${service}`,Origin:'https://account.example.test',...extra},...(body===undefined?{}:{body:JSON.stringify(body)})});
   const provider=mockProvider(),repo=repositoryTransport();
   const transport=(async(url:string|URL|Request,init?:RequestInit)=>String(url).includes('/repos/')?repo.fetcher(url,init):provider(url,init)) as typeof fetch;
-  return {a,data,env,user,service,request,transport,repo};
+  return {a,data,storage,env,user,service,request,transport,repo};
 }

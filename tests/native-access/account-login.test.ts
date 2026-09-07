@@ -1,32 +1,37 @@
-import { it, expect } from 'vitest';
-import { managedSdk, QuarantinedSdkStorage, productionLogin } from '../../account/login';
-it('pinned SDK quarantines initial and refreshed provider fields before storage writes and never selects production login', async () => {
-  const writes = new Map<string, string>();
-  const storage = new QuarantinedSdkStorage({ getItem: key => writes.get(key) ?? null, setItem: (key, value) => { writes.set(key, value); }, removeItem: key => { writes.delete(key); } });
-  const user = { id: 'managed-A', aud: 'authenticated', app_metadata: { provider: 'github' }, user_metadata: { leaked: 'INERT_METADATA' }, identities: [], created_at: new Date().toISOString() };
-  const sdk = managedSdk('https://fixture.supabase.invalid', 'synthetic-publishable', storage, async (url) => {
-    if (String(url).includes('/user')) return Response.json(user);
-    return Response.json({ access_token: 'managed-access', refresh_token: 'managed-refresh', token_type: 'bearer', expires_in: 3600, provider_token: 'ANY_PROVIDER_CREDENTIAL', provider_refresh_token: 'OTHER_PROVIDER_REFRESH', user });
-  });
-  const start = await sdk.auth.signInWithOAuth({ provider: 'github', options: { redirectTo: 'https://account.example.test/account/callback', scopes: 'read:user', skipBrowserRedirect: true } }); expect(start.error).toBeNull(); expect(writes.size).toBeGreaterThan(0);
-  const exchange = await sdk.auth.exchangeCodeForSession('synthetic-code'); expect(exchange.error).toBeNull();
-  expect((await sdk.auth.getUser(exchange.data.session!.access_token)).error).toBeNull();
-  expect((await sdk.auth.refreshSession({ refresh_token: exchange.data.session!.refresh_token })).error).toBeNull();
-  expect([...writes.values()].join('')).not.toMatch(/PROVIDER|managed-access|managed-refresh|INERT_METADATA/);
-  const staged = await storage.getItem('account-managed'); expect(staged).not.toMatch(/PROVIDER|INERT_METADATA/); expect(staged).toContain('managed-access');
-  storage.discard(); await expect(productionLogin.begin({browser:'x',nonce:'x'})).rejects.toThrow(); await expect(productionLogin.complete({code:'x'})).rejects.toThrow();
-  sdk.auth.stopAutoRefresh();
+import { it, expect, vi } from 'vitest';
+import { productionLogin } from '../../account/login';
+const callback = 'https://account.example.test/account/callback';
+function fixture(scope: unknown = 'read:user', id: unknown = 1001, extra: Record<string, unknown> = {}) {
+  const requests: string[] = [];
+  const fetcher: typeof fetch = async (url, init) => { requests.push(String(url)); expect(init?.redirect).toBe('manual'); return String(url).endsWith('/user') ? Response.json({ id, login: 'display-only', email: 'collision@example.test' }, { headers: { 'x-oauth-scopes': typeof scope === 'string' ? scope : '' } }) : Response.json({ access_token: 'INERT_IDENTITY_ACCESS', refresh_token: 'INERT_IDENTITY_REFRESH', token_type: 'bearer', scope, ...extra }); };
+  const adapter = productionLogin({ clientId: 'synthetic', clientSecret: 'INERT_CLIENT', callback, fetch: fetcher });
+  return { adapter, requests };
+}
+it('maintained GitHub bootstrap requests exact read:user/S256 and returns only fresh numeric identity, never either credential', async () => {
+  const { adapter, requests } = fixture(), start = await adapter.begin(), target = new URL(start.url);
+  expect(target.origin + target.pathname).toBe('https://github.com/login/oauth/authorize'); expect(target.searchParams.get('scope')).toBe('read:user'); expect(target.searchParams.get('code_challenge_method')).toBe('S256'); expect(start.url).not.toContain(start.transaction.verifier);
+  const result = await adapter.complete({ url: new URL(callback + '?code=synthetic&state=' + start.transaction.state), transaction: start.transaction });
+  expect(result).toEqual({ githubId: 1001 }); expect(JSON.stringify(result)).not.toMatch(/INERT|access|refresh/); expect(requests).toEqual(['https://github.com/login/oauth/access_token', 'https://api.github.com/user']);
 });
-
-it('actual native SDK transport refuses redirect statuses without forwarding managed credentials', async () => {
-  const { build } = await import('esbuild'); const { Miniflare } = await import('miniflare');
-  const output = await build({ stdin: { contents: `import {managedSdk,QuarantinedSdkStorage} from './account/login';export default{async fetch(request){const sdk=managedSdk('https://managed.example.test','synthetic',new QuarantinedSdkStorage({getItem:k=>k.endsWith('-code-verifier')?JSON.stringify('f'.repeat(64)):null,setItem:()=>{},removeItem:()=>{}}));const path=new URL(request.url).pathname;const result=path==='/code'?await sdk.auth.exchangeCodeForSession('synthetic'):path==='/refresh'?await sdk.auth.refreshSession({refresh_token:'INERT_MANAGED_REFRESH'}):await sdk.auth.getUser('INERT_MANAGED_ACCESS');return Response.json({ok:!result.error})}}`, resolveDir: process.cwd(), loader: 'ts' }, bundle: true, write: false, format: 'esm', platform: 'browser' });
-  for (const status of [301, 302, 303, 307, 308]) {
-    const calls: string[] = [];
-    const mf = new Miniflare({ modules: true, script: output.outputFiles[0].text, compatibilityDate: '2026-06-16', compatibilityFlags: ['nodejs_compat'], cf: false, host: '127.0.0.1', port: 0, outboundService: (request: import('miniflare').Request) => { calls.push(new URL(request.url).pathname); return new Response('INERT_REDIRECT_BODY', { status, headers: { Location: 'https://managed.example.test/redirected?token=INERT_QUERY' } }); } });
-    try {
-      for (const path of ['/user', '/code', '/refresh']) { const result = await mf.dispatchFetch('https://fixture.invalid' + path); expect(await result.json()).toEqual({ ok: false }); }
-      expect(calls).toEqual(['/auth/v1/user', '/auth/v1/token', '/auth/v1/token']);
-    } finally { await mf.dispose(); }
+it.each([undefined, null, '', ' ', ',read:user', 'read:user,', 'repo', 'user', 'user:email', 'offline_access', 'read:user repo', 'read:user unknown', ['read:user']])('rejects missing, malformed or broader identity scopes %j', async scope => {
+  const { adapter } = fixture(scope === undefined ? null : scope), start = await adapter.begin();
+  await expect(adapter.complete({ url: new URL(callback + '?code=x&state=' + start.transaction.state), transaction: start.transaction })).rejects.toThrow();
+});
+it.each([0, -1, '1001', null, 1.5])('rejects nonnumeric or invalid provider ID %j', async id => { const { adapter } = fixture('read:user', id), start = await adapter.begin(); await expect(adapter.complete({ url: new URL(callback + '?code=x&state=' + start.transaction.state), transaction: start.transaction })).rejects.toThrow(); });
+it('rejects wrong state, callback, purpose, expiration and provider denial before exchange', async () => {
+  const { adapter, requests } = fixture(), start = await adapter.begin();
+  for (const url of [callback + '?code=x&state=wrong', 'https://other.example.test/account/callback?code=x&state=' + start.transaction.state, callback + '?error=access_denied&state=' + start.transaction.state]) await expect(adapter.complete({ url: new URL(url), transaction: start.transaction })).rejects.toThrow();
+  await expect(adapter.complete({ url: new URL(callback + '?code=x&state=' + start.transaction.state), transaction: { ...start.transaction, expiresAt: Date.now() - 1 } })).rejects.toThrow(); expect(requests).toEqual([]);
+});
+it.each([301, 302, 303, 307, 308])('rejects provider redirect %s without second destination', async status => {
+  const calls: string[] = [], adapter = productionLogin({ clientId: 'x', clientSecret: 'INERT_CLIENT', callback, fetch: async url => { calls.push(String(url)); return new Response('INERT_REDIRECT', { status, headers: { Location: 'https://evil.example.test/?access=INERT' } }); } }), start = await adapter.begin();
+  await expect(adapter.complete({ url: new URL(callback + '?code=x&state=' + start.transaction.state), transaction: start.transaction })).rejects.toThrow(); expect(calls).toHaveLength(1);
+});
+it('bounds response size and provider timeout', async () => {
+  for (const mode of ['oversize', 'timeout']) {
+    const adapter = productionLogin({ clientId: 'x', clientSecret: 'INERT_CLIENT', callback, fetch: async (_url, init) => mode === 'oversize' ? new Response('x'.repeat(65537)) : new Promise((_resolve, reject) => init?.signal?.addEventListener('abort', () => reject(new Error('aborted')))) });
+    const start = await adapter.begin(); if (mode === 'timeout') vi.useFakeTimers();
+    const result = adapter.complete({ url: new URL(callback + '?code=x&state=' + start.transaction.state), transaction: start.transaction }); const rejected = expect(result).rejects.toThrow();
+    if (mode === 'timeout') await vi.advanceTimersByTimeAsync(5001); await rejected; vi.useRealTimers();
   }
-}, 30_000);
+});

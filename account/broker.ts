@@ -4,7 +4,7 @@ export { AccountIdentityRegistry } from './identity-registry';
 import { createLocalJWKSet, importJWK, SignJWT, type JSONWebKeySet } from 'jose';
 import { AccessDenied, bearer, verifyAccount, verifySession, type SessionContext, type SessionPolicy } from './session';
 import { GitHubOAuth } from './oauth';
-import { DurableGrantStore, GrantVault } from './grants';
+import { DurableGrantStore, GrantVault, type BrowserGrantProof } from './grants';
 import { GitHubReads, validateRead } from './upstream';
 
 export type ReadAction = 'resolve_repository' | 'resolve_ref' | 'read_tree' | 'read_archive' | 'read_blob';
@@ -39,6 +39,7 @@ export class AccountBroker {
 }
 export interface AccountEnv {
   ACCOUNT_IDENTITY_REGISTRY?: DurableObjectNamespace;
+  ACCOUNT_BROWSER_SESSIONS?: DurableObjectNamespace;
   PRIVATE_ACTIVATION: string; ACCOUNT_GRANTS: DurableObjectNamespace;
   ACCOUNT_ISSUER: string; SERVICE_ISSUER: string; BROKER_AUDIENCE: string; RESOURCE: string; SERVICE: string;
   ACCOUNT_JWKS: string; SERVICE_JWKS: string; VAULT_KEY_HEX: string;
@@ -84,9 +85,9 @@ export class AccountGrantObject implements DurableObject {
       this.vault ??= new GrantVault(store, key, context.subject);
       const oauth = new GitHubOAuth({ clientId: this.env.GITHUB_CLIENT_ID, clientSecret: this.env.GITHUB_CLIENT_SECRET, callback: this.env.GITHUB_CALLBACK, fetch });
       if (url.pathname === '/internal/bootstrap' && request.method === 'POST') {
-        if (!this.env.ACCOUNT_IDENTITY_REGISTRY) throw new AccessDenied();
-        const registry = this.env.ACCOUNT_IDENTITY_REGISTRY;
-        const identity = await registry.get(registry.idFromName('identity-registry-v1')).fetch('https://internal.invalid/', { method: 'POST', body: JSON.stringify({ operation: 'verify', identity: { subject: context.subject, githubId: context.githubId } }) });
+        if (!this.env.ACCOUNT_BROWSER_SESSIONS) throw new AccessDenied();
+        const registry = this.env.ACCOUNT_BROWSER_SESSIONS;
+        const identity = await registry.get(registry.idFromName('account-authority-v2')).fetch('https://internal.invalid/', { method: 'POST', body: JSON.stringify({ operation: 'verify', identity: { subject: context.subject, githubId: context.githubId } }) });
         if (!identity.ok) throw new AccessDenied();
         return Response.json(await this.vault.bootstrap(context.githubId), { headers: { 'Cache-Control': 'no-store' } });
       }
@@ -118,8 +119,19 @@ export class AccountGrantObject implements DurableObject {
       }
       if (url.pathname === '/oauth/callback' && request.method === 'GET') {
         const result = await oauth.callback(url, context, store);
+        const proof = request.headers.get('X-Account-Browser-Proof');
+        if (proof) {
+          if (!result.credential) throw new AccessDenied();
+          return Response.json(await this.vault.prepare(result.credential, result.generation, JSON.parse(proof) as BrowserGrantProof, this.state.storage), { headers: { 'Cache-Control': 'no-store' } });
+        }
+        // Binding-only legacy contract for internal tests/tools; the public Worker rejects this raw path.
         const generation = result.credential ? await this.vault.connect(result.credential, result.generation) : context.generation;
         return Response.json({ connected: Boolean(result.credential), generation }, { headers: { 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' } });
+      }
+      if (url.pathname === '/internal/grant/commit' && request.method === 'POST') {
+        const value = await request.json() as { candidateId: string; browser: BrowserGrantProof };
+        if (value.browser.subject !== context.subject || value.browser.githubId !== context.githubId) throw new AccessDenied();
+        return Response.json({ generation: await this.vault.commitCandidate(value.candidateId, value.browser, this.state.storage) }, { headers: { 'Cache-Control': 'no-store' } });
       }
       if (url.pathname === '/disconnect' && request.method === 'POST') {
         if (request.headers.get('Origin') !== new URL(this.env.ACCOUNT_ISSUER).origin) throw new AccessDenied();
@@ -187,6 +199,8 @@ export default {
   async fetch(request: Request, env: AccountEnv, ctx: ExecutionContext): Promise<Response> {
     const account = await accountRoutes(request, env, r => accountWorker.fetch(r, env));
     if (account) return account;
+    // Repository authorization is reachable only through the CSRF/fresh-browser wrapper above.
+    if (['/oauth/start', '/oauth/callback'].includes(new URL(request.url).pathname)) return errorResponse(new AccessDenied());
     if (!['/authorize', '/token', '/connector/session', '/.well-known/oauth-authorization-server', '/.well-known/oauth-protected-resource'].includes(new URL(request.url).pathname)) return accountWorker.fetch(request, env);
     try {
       if (env.PRIVATE_ACTIVATION !== 'owner-verified' || !env.ACCOUNT_CONNECTOR_KV) throw new AccessDenied();
@@ -195,7 +209,7 @@ export default {
       const provider = new OAuthProvider<ConnectorEnv>({
         apiRoute: env.RESOURCE,
         apiHandler: { fetch: (r, e, c) => connectorSession(r, e, (c as ExecutionContext & { props: unknown }).props) },
-        defaultHandler: { fetch: async (r, e) => await accountConsent(r, e, e.OAUTH_PROVIDER, trusted => completeConnectorConsent(trusted, e, e.OAUTH_PROVIDER)) ?? completeConnectorConsent(r, e, e.OAUTH_PROVIDER) },
+        defaultHandler: { fetch: async (r, e) => await accountConsent(r, e, e.OAUTH_PROVIDER, trusted => completeConnectorConsent(trusted, e, e.OAUTH_PROVIDER)) ?? errorResponse(new AccessDenied()) },
         authorizeEndpoint: `${env.ACCOUNT_ISSUER}/authorize`, tokenEndpoint: `${env.ACCOUNT_ISSUER}/token`,
         resourceMatchOriginOnly: false, resourceMetadata: { resource: env.RESOURCE, authorization_servers: [env.ACCOUNT_ISSUER] }, scopesSupported: ['repository:read'],
       });

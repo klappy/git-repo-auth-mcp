@@ -1,6 +1,7 @@
 import {it,expect,vi} from 'vitest';
 vi.mock('cloudflare:workers',()=>({WorkerEntrypoint:class{}}));
-import worker,{accountWorker} from '../../account/broker';
+import worker,{accountWorker,completeConnectorConsent} from '../../account/broker';
+import {getOAuthApi} from '@cloudflare/workers-oauth-provider';
 import {generateRandomCodeVerifier,calculatePKCECodeChallenge} from 'oauth4webapi';
 import {harness} from './worker-harness';
 import {context,input} from './helpers';
@@ -14,10 +15,14 @@ it('actual Workers OAuth provider consent→PKCE token→opaque protected sessio
   try {
     const start=await accountWorker.fetch(h.request('/oauth/start?purpose=repository'),h.env);const u=new URL((await start.json() as {authorizationUrl:string}).authorizationUrl);const callback=new URL(h.env.GITHUB_CALLBACK+'?code=synthetic');callback.searchParams.set('state',u.searchParams.get('state')!);expect((await accountWorker.fetch(new Request(callback,{headers:{Authorization:`Bearer ${h.user}`}}),h.env)).status).toBe(200);
     const verifier=generateRandomCodeVerifier(),auth=new URL('https://account.example.test/authorize');auth.search=new URLSearchParams({client_id:'synthetic-native-client',redirect_uri:'https://client.example.test/callback',response_type:'code',state:'synthetic-native-state',scope:'repository:read',code_challenge:await calculatePKCECodeChallenge(verifier),code_challenge_method:'S256',resource:context.resource}).toString();
-    const consent=await worker.fetch(h.request('/authorize',{approved:true,authorizationUrl:auth.toString()}),h.env,ctx);expect(consent.status).toBe(200);const redirect=new URL((await consent.json() as {redirectTo:string}).redirectTo);let code=redirect.searchParams.get('code')!;
+    const denied=await worker.fetch(h.request('/authorize',{approved:true,authorizationUrl:auth.toString()}),h.env,ctx);expect(denied.status).toBe(403); // Existing signed connector authority cannot consent without a browser.
+    const helpers=getOAuthApi({apiRoute:h.env.RESOURCE,apiHandler:{fetch:()=>new Response('',{status:403})},defaultHandler:{fetch:()=>new Response('',{status:403})},authorizeEndpoint:h.env.ACCOUNT_ISSUER+'/authorize',tokenEndpoint:h.env.ACCOUNT_ISSUER+'/token',resourceMatchOriginOnly:false},{...h.env,OAUTH_KV:h.env.ACCOUNT_CONNECTOR_KV});
+    // This battery tests the trusted maintained-provider substrate, not a public browser bypass.
+    const internalConsent=()=>completeConnectorConsent(h.request('/authorize',{approved:true,authorizationUrl:auth.toString()}),h.env,helpers);
+    const consent=await internalConsent();expect(consent.status).toBe(200);const redirect=new URL((await consent.json() as {redirectTo:string}).redirectTo);let code=redirect.searchParams.get('code')!;
     const exchange=(resource:string)=>new Request('https://account.example.test/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({grant_type:'authorization_code',client_id:'synthetic-native-client',redirect_uri:'https://client.example.test/callback',code,code_verifier:verifier,resource})});
     const wrong=await worker.fetch(exchange('https://navigator.example.test/other'),h.env,ctx);expect(wrong.status).toBe(400);
-    const retryConsent=await worker.fetch(h.request('/authorize',{approved:true,authorizationUrl:auth.toString()}),h.env,ctx);code=new URL((await retryConsent.json() as {redirectTo:string}).redirectTo).searchParams.get('code')!;
+    const retryConsent=await internalConsent();code=new URL((await retryConsent.json() as {redirectTo:string}).redirectTo).searchParams.get('code')!;
     const tokenResponse=await worker.fetch(exchange(context.resource),h.env,ctx);expect(tokenResponse.status).toBe(200);const token=await tokenResponse.json() as {access_token:string};
     const session=await worker.fetch(h.request('/connector/session',undefined,{Authorization:`Bearer ${token.access_token}`}),h.env,ctx);expect(session.status).toBe(200);const value=await session.json() as {assertion:string};expect(await verifySession(value.assertion,h.service,h.a.policy)).toEqual(context);
     const read=await worker.fetch(h.request('/read',input,{Authorization:`Bearer ${value.assertion}`}),h.env,ctx);expect(read.status).toBe(200);expect(JSON.stringify(await read.json())).not.toContain('INERT_');

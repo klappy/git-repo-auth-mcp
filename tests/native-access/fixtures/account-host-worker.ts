@@ -1,5 +1,6 @@
 /** Localhost-only synthetic control wrapper. Never imported by the production account entrypoint. */
-import worker, { AccountGrantObject, type AccountEnv } from '../../../account/broker';
+import worker, { AccountGrantObject, accountWorker, completeConnectorConsent, type AccountEnv } from '../../../account/broker';
+import { getOAuthApi } from '@cloudflare/workers-oauth-provider';
 export { AccountGrantObject };
 const counts = { exchange: 0, refresh: 0, identity: 0, unexpected: 0 };
 // No fallback to native fetch: all provider egress terminates inside this fixture.
@@ -41,6 +42,12 @@ export default {
     }
     // Exact synthetic HTTPS callback/issuer required by production OAuth; localhost is transport only.
     const target = new URL(url.pathname + url.search, env.ACCOUNT_ISSUER);
+    // Explicit tests-only internal broker substrate: NOT evidence of a public browser journey.
+    if (['/oauth/start', '/oauth/callback'].includes(target.pathname)) return accountWorker.fetch(new Request(target, request), env);
+    if (target.pathname === '/authorize') {
+      const helpers = getOAuthApi({ apiRoute: env.RESOURCE, apiHandler: { fetch: () => new Response('', { status: 403 }) }, defaultHandler: { fetch: () => new Response('', { status: 403 }) }, authorizeEndpoint: env.ACCOUNT_ISSUER + '/authorize', tokenEndpoint: env.ACCOUNT_ISSUER + '/token', resourceMatchOriginOnly: false }, { ...env, OAUTH_KV: env.ACCOUNT_CONNECTOR_KV });
+      return completeConnectorConsent(new Request(target, request), env, helpers);
+    }
     return worker.fetch(new Request(target, request), env, ctx);
   },
 } satisfies ExportedHandler<AccountEnv>;

@@ -29,14 +29,22 @@ it('maintained registered-client browser consent accepts/cancels safely and reje
   const h = await harness(), kv = new Map<string, string>();
   h.env.ACCOUNT_CONNECTOR_KV = { async get(k: string, opts?: unknown) { const v = kv.get(k); return v === undefined ? null : opts === 'json' || (opts as { type?: string })?.type === 'json' ? JSON.parse(v) : v; }, async put(k: string, v: string) { kv.set(k, v); }, async delete(k: string) { kv.delete(k); }, async list() { return { keys: [], list_complete: true }; } } as unknown as KVNamespace;
   kv.set('client:browser-fixture', JSON.stringify({ clientId: 'browser-fixture', clientName: 'Fixture connector', redirectUris: ['https://client.example.test/callback'], tokenEndpointAuthMethod: 'none', grantTypes: ['authorization_code'], responseTypes: ['code'] }));
-  const identity = { subject: 'acct-A', githubId: 1001 }, managed = { access_token: 'INERT_MANAGED', refresh_token: 'INERT_REFRESH', expires_at: Math.floor(Date.now() / 1000) + 3600, user: { id: 'acct-A' } };
+  const identity = { subject: 'acct-A', githubId: 1001 };
   let csrf = 'nonce-one'; const handle = 'b'.repeat(64);
-  const namespace = (fn: (value: Record<string, unknown>) => Response) => ({ idFromName: (s: string) => s, get: () => ({ fetch: async (_r: unknown, init?: RequestInit) => fn(JSON.parse(String(init?.body))) }) }) as unknown as DurableObjectNamespace;
+  const namespace = (fn: (value: Record<string, unknown>) => Response | Promise<Response>) => ({ idFromName: (s: string) => s, get: () => ({ fetch: async (_r: unknown, init?: RequestInit) => fn(JSON.parse(String(init?.body))) }) }) as unknown as DurableObjectNamespace;
   h.env.ACCOUNT_IDENTITY_REGISTRY = namespace(v => JSON.stringify(v.identity) === JSON.stringify(identity) ? Response.json(identity) : Response.json({}, { status: 403 }));
-  const sessions = namespace(v => { if (v.handle !== handle || (v.operation === 'csrf' && v.nonce !== csrf)) return Response.json({}, { status: 403 }); if (v.operation === 'csrf') csrf = 'nonce-' + crypto.randomUUID(); return Response.json({ identity, managed, csrf }); });
-  const env = { ...h.env, ACCOUNT_BROWSER_SESSIONS: sessions, OAUTH_KV: h.env.ACCOUNT_CONNECTOR_KV };
   let mismatchedIdentity = false;
-  const consent = createAccountConsent({ async begin() { throw Error(); }, async complete() { throw Error(); }, async revalidate() { return { identity: mismatchedIdentity ? { ...identity, githubId: 1002 } : identity, managed }; }, async signout() {} });
+  const sessions = namespace(async v => { if (v.operation === 'verify') return mismatchedIdentity || JSON.stringify(v.identity) !== JSON.stringify(identity) ? Response.json({}, { status: 403 }) : Response.json(identity); if (v.handle !== handle || (v.operation === 'csrf' && v.nonce !== csrf)) return Response.json({}, { status: 403 }); if (v.operation === 'csrf') csrf = 'nonce-' + crypto.randomUUID();
+    if (v.operation === 'commit-connector') {
+      // UI/parser fixture only: the real DO gate has its own authorization tests.
+      const { getOAuthApi } = await import('@cloudflare/workers-oauth-provider');
+      const helpers = getOAuthApi({ apiRoute: '/unused', apiHandler: { fetch: () => new Response('', { status: 403 }) }, defaultHandler: { fetch: () => new Response('', { status: 403 }) }, authorizeEndpoint: h.env.ACCOUNT_ISSUER + '/authorize', tokenEndpoint: h.env.ACCOUNT_ISSUER + '/token', resourceMatchOriginOnly: false }, { ...h.env, OAUTH_KV: h.env.ACCOUNT_CONNECTOR_KV });
+      return completeConnectorConsent(new Request(h.env.ACCOUNT_ISSUER + '/authorize', { method: 'POST', headers: { Origin: h.env.ACCOUNT_ISSUER, Authorization: 'Bearer ' + v.assertion }, body: JSON.stringify({ approved: true, authorizationUrl: v.authorizationUrl }) }), h.env, helpers);
+    }
+    return Response.json({ version: 2, identity, csrf, generation: 1, accountEpoch: 0, verifiedAt: Date.now(), absoluteUntil: Date.now() + 28800000 }); });
+  h.env.ACCOUNT_BROWSER_SESSIONS = sessions;
+  const env = { ...h.env, ACCOUNT_BROWSER_SESSIONS: sessions, OAUTH_KV: h.env.ACCOUNT_CONNECTOR_KV };
+  const consent = createAccountConsent();
   const provider = new OAuthProvider<typeof env & { OAUTH_PROVIDER: import('@cloudflare/workers-oauth-provider').OAuthHelpers }>({ apiRoute: '/unused', apiHandler: { fetch: () => Response.json({}) }, defaultHandler: { fetch: async (r, e) => (await consent(r, e, e.OAUTH_PROVIDER, trusted => completeConnectorConsent(trusted, e, e.OAUTH_PROVIDER)))! }, authorizeEndpoint: h.env.ACCOUNT_ISSUER + '/authorize', tokenEndpoint: h.env.ACCOUNT_ISSUER + '/token', resourceMatchOriginOnly: false });
   const ctx = { waitUntil() {}, passThroughOnException() {}, props: {} } as unknown as ExecutionContext;
   vi.stubGlobal('fetch', h.transport);

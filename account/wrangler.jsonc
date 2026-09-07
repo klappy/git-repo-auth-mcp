@@ -15,7 +15,8 @@
     "BROKER_AUDIENCE": "https://broker.example.test/read",
     "RESOURCE": "https://navigator.example.test/mcp",
     "SERVICE": "navigator",
-    "GITHUB_CALLBACK": "https://account.example.test/oauth/callback"
+    "GITHUB_CALLBACK": "https://account.example.test/oauth/callback",
+    "ACCOUNT_LOGIN_CALLBACK": "https://account.example.test/account/callback"
   },
   "durable_objects": {
     "bindings": [

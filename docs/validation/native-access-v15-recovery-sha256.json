@@ -1,0 +1,93 @@
+{
+  "base": "65ed85420683bf8470677c83d87527f4d97e369f",
+  "files": [
+    {
+      "path": "account/README.md",
+      "sha256": "f84dfe510b73c86eae66b6d8b79f6796fead5fd2c7df14c9964533607f5b9002"
+    },
+    {
+      "path": "account/account-routes.ts",
+      "sha256": "1fa989215fbc5741b725cd078971cd78d522a2c3f539d6fc1f50a10b72b1eb70"
+    },
+    {
+      "path": "account/account-ui.ts",
+      "sha256": "1d1ade96308cfc250f46591f512def58653ef249d52258246b81243960007ae8"
+    },
+    {
+      "path": "account/broker.ts",
+      "sha256": "3d5ca8b0a02031df4cedf983d751f3262f1e4ae42f902462004e09c1b350ebe4"
+    },
+    {
+      "path": "account/browser-session.ts",
+      "sha256": "8132670dfd3280b67a836287d8bb7948c3b02bf1925de28d7a642740e9f9740e"
+    },
+    {
+      "path": "account/grants.ts",
+      "sha256": "e7840a0df2d88c74bfd7f12d6792bcba29d68ece3ead0e52e18ea6658bc26193"
+    },
+    {
+      "path": "account/identity-registry.ts",
+      "sha256": "26874ad82f96f0673ac476749a90fd26c39df10cf4f8f9ad3416595d5b50f614"
+    },
+    {
+      "path": "account/login.ts",
+      "sha256": "750dc63fea109222a250121f5c09ba3d84ddc3a03980c739a678c168211e0cfd"
+    },
+    {
+      "path": "account/oauth.ts",
+      "sha256": "1aeee047de97d3b8f190f851b908928ed12fed8292710279c2938c6c969877e6"
+    },
+    {
+      "path": "account/wrangler.jsonc",
+      "sha256": "7eaa0f77dd44eb8fdd52e5288b1f8fd6ca5646425f3ae5e5ef3cb6159ddb256c"
+    },
+    {
+      "path": "docs/design/native-access-identity.md",
+      "sha256": "d7276bd7a3e7a74f70706a95c47fa831b46caedfd83ae51e7ccd9a776e07d074"
+    },
+    {
+      "path": "docs/validation/native-access-provider-evidence.md",
+      "sha256": "fd9d5feec286e955767985b2f62828aab717b8683f6b2d30edc19da0937e3c91"
+    },
+    {
+      "path": "docs/validation/native-access-v15-source-return.md",
+      "sha256": "3aeb27fcec67fe32856c370f9362ceceb2e79b54b1839670f610ea01b0b2f6dd"
+    },
+    {
+      "path": "package-lock.json",
+      "sha256": "f31873dd91fb21037aec630bab79ff5fe1045a99e83119dccd967ab294e327f6"
+    },
+    {
+      "path": "package.json",
+      "sha256": "4223718b0bdc92668a6c51aa313db1a706b87b3eb6d1ccc73930889736c70fea"
+    },
+    {
+      "path": "tests/native-access/account-browser-session.test.ts",
+      "sha256": "25ff31f92e7769bd8118885a261642e8154d41c078bb2e28ad7d7f69cfc65d65"
+    },
+    {
+      "path": "tests/native-access/account-final-authorization.test.ts",
+      "sha256": "635e48dd99f3512230c1027c57b244dd1eb3f1b78e3bf754ad01f80dd24971e3"
+    },
+    {
+      "path": "tests/native-access/account-login.test.ts",
+      "sha256": "195ed0d01e6f92598b99e48fde2bf3a2fcaf54c5b4eee7c8110787b80540e527"
+    },
+    {
+      "path": "tests/native-access/account-ui.test.ts",
+      "sha256": "049e463f3dddbe7c022db18e819bad217cf9458db390a38e37f9ad40b51ea8e5"
+    },
+    {
+      "path": "tests/native-access/fixtures/account-host-worker.ts",
+      "sha256": "1940a04537752d5b4248b5162b2bfe463193c6805c1608e1137f90ffee6bd464"
+    },
+    {
+      "path": "tests/native-access/provider-native-flow.test.ts",
+      "sha256": "a94d6f60a55b69e6f41dea7f0e31ad90f447099c9852b36b7b52fe63ae463b13"
+    },
+    {
+      "path": "tests/native-access/worker-harness.ts",
+      "sha256": "377a4a04b098a0dc3d35e057bfed968de8c62566dae3a69d054811c3f672bdfe"
+    }
+  ]
+}

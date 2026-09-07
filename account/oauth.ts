@@ -14,9 +14,10 @@ export interface TransactionStore {
   take(state: string): Promise<OAuthTransaction | undefined>;
 }
 export interface OAuthConfig { clientId: string; clientSecret: string; callback: string; fetch: typeof fetch; }
+export interface IdentityTransaction { kind: 'identity-bootstrap'; state: string; verifier: string; callback: string; expiresAt: number; }
 const server: oauth.AuthorizationServer = { issuer: 'https://github.com', authorization_endpoint: 'https://github.com/login/oauth/authorize', token_endpoint: 'https://github.com/login/oauth/access_token' };
 export function normalizedScopes(scope: unknown): string[] {
-  if (typeof scope !== 'string') throw new AccessDenied();
+  if (typeof scope !== 'string' || !/^[A-Za-z0-9:_-]+(?:[ ,]+[A-Za-z0-9:_-]+)*$/.test(scope.trim())) throw new AccessDenied();
   return [...new Set(scope.split(/[ ,]+/).filter(Boolean))].sort();
 }
 export function validateScopes(scope: unknown, purpose: OAuthTransaction['purpose']): string[] {
@@ -34,16 +35,41 @@ export class GitHubOAuth {
     // Preserve native fetch invocation for /user and maintained OAuth exchanges.
     this.config = { ...config, fetch: async (input, init) => {
       // workerd supports follow/manual only. Preserve requested no-follow semantics.
-      const rejectRedirect = init?.redirect === 'error';
-      const response = await transport(input, rejectRedirect ? { ...init, redirect: 'manual' } : init);
-      if (rejectRedirect && response.status >= 300 && response.status < 400) {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 5000);
+      try {
+      const response = await transport(input, { ...init, redirect: 'manual', signal: controller.signal });
+      if (response.status >= 300 && response.status < 400) {
         await response.body?.cancel();
         throw new AccessDenied();
       }
-      return response;
+      const reader = response.body?.getReader(); const chunks: Uint8Array[] = []; let size = 0;
+      if (reader) { try { for (;;) { const part = await reader.read(); if (part.done) break; size += part.value.length; if (size > 65536) throw new AccessDenied(); chunks.push(part.value); } } catch (e) { await reader.cancel(); throw e; } finally { reader.releaseLock(); } }
+      const bytes = new Uint8Array(size); let offset = 0; for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.length; }
+      return new Response(bytes, { status: response.status, headers: response.headers });
+      } finally { clearTimeout(timeout); }
     } };
     if (new URL(config.callback).protocol !== 'https:') throw new AccessDenied();
     this.client = { client_id: config.clientId };
+  }
+  async startIdentity(): Promise<{ url: string; transaction: IdentityTransaction }> {
+    const transaction: IdentityTransaction = { kind: 'identity-bootstrap', state: oauth.generateRandomState(), verifier: oauth.generateRandomCodeVerifier(), callback: this.config.callback, expiresAt: Date.now() + 300_000 };
+    const url = new URL(server.authorization_endpoint!);
+    url.search = new URLSearchParams({ client_id: this.client.client_id, redirect_uri: transaction.callback, response_type: 'code', scope: 'read:user', state: transaction.state, code_challenge: await oauth.calculatePKCECodeChallenge(transaction.verifier), code_challenge_method: 'S256' }).toString();
+    return { url: url.toString(), transaction };
+  }
+  async completeIdentity(url: URL, tx: IdentityTransaction): Promise<{ githubId: number }> {
+    if (tx.kind !== 'identity-bootstrap' || tx.expiresAt <= Date.now() || tx.callback !== this.config.callback || url.origin + url.pathname !== tx.callback) throw new AccessDenied();
+    const params = oauth.validateAuthResponse(server, this.client, url, tx.state);
+    const response = await oauth.authorizationCodeGrantRequest(server, this.client, oauth.ClientSecretPost(this.config.clientSecret), params, tx.callback, tx.verifier, { [oauth.customFetch]: this.config.fetch });
+    let result: oauth.TokenEndpointResponse | undefined;
+    try {
+      result = await oauth.processAuthorizationCodeResponse(server, this.client, response);
+      const scopes = validateScopes(result.scope, 'identity');
+      return { githubId: await this.identity(result.access_token, scopes) };
+    } finally {
+      result = undefined;
+    }
   }
   async start(context: SessionContext, purpose: OAuthTransaction['purpose'], store: TransactionStore) {
     if (purpose !== 'identity' && purpose !== 'repository') throw new AccessDenied();
@@ -51,7 +77,7 @@ export class GitHubOAuth {
     const transaction: OAuthTransaction = { state, verifier, subject: context.subject, githubId: context.githubId, resource: context.resource, callback: this.config.callback, purpose, generation: context.generation, expiresAt: Date.now() + 300_000 };
     await store.put(transaction);
     const url = new URL(server.authorization_endpoint!);
-    url.search = new URLSearchParams({ client_id: this.client.client_id, redirect_uri: transaction.callback, response_type: 'code', scope: purpose === 'repository' ? 'repo' : 'read:user', state, code_challenge: await oauth.calculatePKCECodeChallenge(verifier), code_challenge_method: 'S256' }).toString();
+    url.search = new URLSearchParams({ client_id: this.client.client_id, redirect_uri: transaction.callback, response_type: 'code', scope: purpose === 'repository' ? 'repo offline_access' : 'read:user', state, code_challenge: await oauth.calculatePKCECodeChallenge(verifier), code_challenge_method: 'S256' }).toString();
     return url.toString();
   }
   async callback(url: URL, context: SessionContext, store: TransactionStore): Promise<{ credential: ProviderCredential | null; generation: number }> {

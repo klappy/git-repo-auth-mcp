@@ -1,5 +1,29 @@
 import { AccessDenied, positiveInteger } from './session';
 export interface AccountIdentity { subject: string; githubId: number; }
+export const IDENTITY_ISSUER = 'https://github.com';
+/** Caller owns the transaction, so session issuance and both immutable indexes commit together. */
+export async function resolveIdentity(tx: DurableObjectTransaction, githubId: number): Promise<AccountIdentity> {
+  if (!positiveInteger(githubId)) throw new AccessDenied();
+  const reverse = 'identity:v2:' + IDENTITY_ISSUER + ':' + githubId;
+  let subject = await tx.get<string>(reverse);
+  if (subject !== undefined) {
+    if (typeof subject !== 'string' || !/^acct_[a-f0-9-]{36}$/.test(subject)) throw new AccessDenied();
+    if (await tx.get('identity:v2:subject:' + subject) !== githubId) throw new AccessDenied();
+  } else {
+    // A partial restore must not silently assign a new subject to an existing numeric identity.
+    // Complete first-slice scan; capacity exhaustion denies rather than treating partial coverage as absence.
+    const forwards = await tx.list<number>({ prefix: 'identity:v2:subject:', limit: 10001 });
+    if (forwards.size >= 10001 || [...forwards.values()].some(id => !positiveInteger(id) || id === githubId)) throw new AccessDenied();
+    subject = 'acct_' + crypto.randomUUID();
+    if (await tx.get('identity:v2:subject:' + subject) !== undefined) throw new AccessDenied();
+    await tx.put({ [reverse]: subject, ['identity:v2:subject:' + subject]: githubId });
+  }
+  return { subject, githubId };
+}
+export async function verifyIdentity(tx: DurableObjectTransaction, identity: AccountIdentity) {
+  validateIdentity(identity);
+  if (await tx.get('identity:v2:subject:' + identity.subject) !== identity.githubId || await tx.get('identity:v2:' + IDENTITY_ISSUER + ':' + identity.githubId) !== identity.subject) throw new AccessDenied();
+}
 export function validateIdentity(value: AccountIdentity): void {
   if (!value || typeof value.subject !== 'string' || !/^[A-Za-z0-9:_-]{1,200}$/.test(value.subject) || !positiveInteger(value.githubId)) throw new AccessDenied();
 }
