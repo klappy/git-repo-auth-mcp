@@ -62,12 +62,12 @@ export function createAccountRoutes(adapter?: LoginAdapter) {
         if (restart === 'standalone') {
           const handle = cookie(request, '__Host-account_browser') || (cookie(request, '__Host-account_session') ? '' : opaque()), continuationRef = continuationCookie(request);
           const pending = await browser(env, { operation: 'begin', handle, activeHandle: cookie(request, '__Host-account_session') || undefined, continuationRef, restart: true }) as { nonce: string; browserHandle: string };
-          return response(standalonePage(pending.nonce, continuationRef), 200, { 'Set-Cookie': setCookie('__Host-account_browser', pending.browserHandle, 300) });
+          return response(standalonePage(pending.nonce, continuationRef), 200, { 'Set-Cookie': setCookie('__Host-account_browser', pending.browserHandle, 28_800) });
         }
         const activeHandle = cookie(request, '__Host-account_session') || undefined;
         const handle = cookie(request, '__Host-account_browser') || (activeHandle ? '' : opaque()), continuationRef = continuationCookie(request);
         const pending = await browser(env, { operation: 'begin', handle, activeHandle, continuationRef }) as { nonce: string; browserHandle: string };
-        return response(accountPage({ loginCsrf: pending.nonce, continuationRef }), 200, { 'Set-Cookie': setCookie('__Host-account_browser', pending.browserHandle, 300) });
+        return response(accountPage({ loginCsrf: pending.nonce, continuationRef }), 200, { 'Set-Cookie': setCookie('__Host-account_browser', pending.browserHandle, 28_800) });
       }
       if (path === '/account/callback') {
         if (env.PRIVATE_ACTIVATION !== 'owner-verified' || request.method !== 'GET' || url.origin + path !== env.ACCOUNT_LOGIN_CALLBACK) throw new AccessDenied();
