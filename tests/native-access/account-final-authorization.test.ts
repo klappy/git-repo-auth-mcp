@@ -110,7 +110,7 @@ it('real browser route signout during paused provider exchange leaves prior encr
     return h.transport(input, init);
   });
   try {
-    const connect = await send(new Request(h.env.ACCOUNT_ISSUER + '/account/repositories/connect', { method: 'POST', headers, body: new URLSearchParams({ csrf: active.csrf }).toString() }));
+    const connect = await send(new Request(h.env.ACCOUNT_ISSUER + '/account/repositories/connect', { method: 'POST', headers, body: new URLSearchParams({ csrf: active.csrf, purpose: 'account' }).toString() }));
     expect(connect!.status).toBe(303);
     const state = new URL(connect!.headers.get('Location')!).searchParams.get('state')!;
     const pending = send(new Request(h.env.GITHUB_CALLBACK + '?code=synthetic&state=' + state, { headers }));

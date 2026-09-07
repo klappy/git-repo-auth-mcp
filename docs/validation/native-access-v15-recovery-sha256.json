@@ -2,16 +2,12 @@
   "base": "65ed85420683bf8470677c83d87527f4d97e369f",
   "files": [
     {
-      "path": "account/README.md",
-      "sha256": "e991b47cd570d17567c0c8326935c54cda143ee203076e884b2f700b4db9c796"
-    },
-    {
       "path": "account/account-routes.ts",
-      "sha256": "db63fa5416df3a934f05a812d933a6954065fe0015275348e9ca4f54a95705cd"
+      "sha256": "d6b157fc4152f580f7c75e4713a2afcf8318b5f8c2846349ae99a615715e6efe"
     },
     {
       "path": "account/account-ui.ts",
-      "sha256": "debdd052027073f791b45d218723251e6218df05d8315ddf12e5285d7b2d3370"
+      "sha256": "f9e9359b00e5fd1954a3099f6f01f5a5b55b1e889458f460a6d4ee4bca9fbdff"
     },
     {
       "path": "account/broker.ts",
@@ -19,7 +15,7 @@
     },
     {
       "path": "account/browser-session.ts",
-      "sha256": "4e221fd7f09698cece6ce06a3d1bfcf192e630f218156badd79e442ea551f84e"
+      "sha256": "306c3897769784f286ad127f100c21481966a594806f31bb493602c818b848fe"
     },
     {
       "path": "account/grants.ts",
@@ -38,12 +34,16 @@
       "sha256": "1aeee047de97d3b8f190f851b908928ed12fed8292710279c2938c6c969877e6"
     },
     {
+      "path": "account/README.md",
+      "sha256": "9cf848d8da2ffe9749251f006284044ab9f1d3431e2bbba2818d5288ef000180"
+    },
+    {
       "path": "account/wrangler.jsonc",
       "sha256": "7eaa0f77dd44eb8fdd52e5288b1f8fd6ca5646425f3ae5e5ef3cb6159ddb256c"
     },
     {
       "path": "docs/design/native-access-identity.md",
-      "sha256": "ced59c775023656e269f1e6b8125ef151c264566f5f2acc96cfd8e6eaab07adf"
+      "sha256": "55fd51c947196f2909251f963f75285b80538277f693a0cedc043f0a6db7fa87"
     },
     {
       "path": "docs/validation/native-access-provider-evidence.md",
@@ -51,7 +51,7 @@
     },
     {
       "path": "docs/validation/native-access-v15-source-return.md",
-      "sha256": "15c065dff908435f76ce931fd03e62cb1bf41436fd5a33d10ea2a217da8127c1"
+      "sha256": "39d191462b475c138cc63664aba038213d3f07d1ae2c7f068dc876ca54771a6d"
     },
     {
       "path": "package-lock.json",
@@ -70,16 +70,24 @@
       "sha256": "64e55b9b730384c63d997f7b25bd06151a09cf0bdd038caff93a7c4498c24c40"
     },
     {
+      "path": "tests/native-access/account-dashboard-recovery.test.ts",
+      "sha256": "04443f00c629ca1cc8a31bc85602c9d9653fcbf6b98db79eb55ddb7256cd9f6a"
+    },
+    {
       "path": "tests/native-access/account-final-authorization.test.ts",
-      "sha256": "635e48dd99f3512230c1027c57b244dd1eb3f1b78e3bf754ad01f80dd24971e3"
+      "sha256": "25491c56584d2d5c6d14d07b5787b28dc6b4f793fa9a82433a666241e9b3f820"
     },
     {
       "path": "tests/native-access/account-login.test.ts",
       "sha256": "195ed0d01e6f92598b99e48fde2bf3a2fcaf54c5b4eee7c8110787b80540e527"
     },
     {
+      "path": "tests/native-access/account-repository-start.test.ts",
+      "sha256": "23d5829a5b9c9cc245bb0e1ada1ac059eca6d7f3d902405b01d0a71b1164cc52"
+    },
+    {
       "path": "tests/native-access/account-standalone-recovery.test.ts",
-      "sha256": "b1c9e0a790a66e7fc03764be1b2daf3cbcad30bea335d0c3d1f54fe86bf08b31"
+      "sha256": "b68abec43cd64d36d0472af4068d3523d93dbd4d302119da5390a3ed3b01f5b6"
     },
     {
       "path": "tests/native-access/account-ui.test.ts",
