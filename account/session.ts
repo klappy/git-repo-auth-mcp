@@ -12,9 +12,12 @@ export class AccessDenied extends Error { constructor() { super('access_denied')
 export const positiveInteger = (value: unknown): value is number => Number.isSafeInteger(value) && Number(value) > 0;
 async function claims(token: string, key: VerificationKey, issuer: string, audience: string) {
   if (!token || token.length > 8192) throw new AccessDenied();
-  const { payload } = await jwtVerify(token, key as JWTVerifyGetKey, {
-    issuer, audience, algorithms: ['ES256'], requiredClaims: ['sub', 'iat', 'exp'], maxTokenAge: '5 minutes',
-  });
+  let payload;
+  try {
+    ({ payload } = await jwtVerify(token, key as JWTVerifyGetKey, {
+      issuer, audience, algorithms: ['ES256'], requiredClaims: ['sub', 'iat', 'exp'], maxTokenAge: '5 minutes',
+    }));
+  } catch { throw new AccessDenied(); }
   if (payload.aud !== audience || !payload.sub || payload.exp! - payload.iat! > 300) throw new AccessDenied();
   return payload;
 }

@@ -61,7 +61,7 @@ export class GitHubReads {
         if (blob.type !== 'file' || blob.path !== input.path || !SHA.test(blob.sha ?? '') || blob.encoding !== 'base64' || typeof blob.content !== 'string' || atob(blob.content).includes(token)) throw new AccessDenied();
         data = { path: blob.path, sha: blob.sha, encoding: blob.encoding, content: blob.content }; break;
       }
-      case 'read_archive': data = await this.request(`${base}/tarball/${commit.sha}`, token, true, `/${input.repository.owner}/${input.repository.name}/legacy.tar.gz/${commit.sha}`); break;
+      case 'read_archive': data = await this.request(`${base}/tarball/${commit.sha}`, token, true, `/${repo.full_name}/legacy.tar.gz/${commit.sha}`); break;
     }
     // A provider malfunction must not make even a sentinel bearer an outbound data value.
     if (JSON.stringify(data).includes(token)) throw new AccessDenied();
