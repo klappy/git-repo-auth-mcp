@@ -112,7 +112,10 @@ export function createAccountRoutes(adapter?: LoginAdapter) {
         await continuation(env, cookie(request, '__Host-account_browser'), ref);
         try { await current(env, handle, true); } catch { return response('', 303, { Location: '/account/signin' }); }
       }
-      if (path === '/account' && request.method === 'GET' && !handle) return env.ACCOUNT_BROWSER_SESSIONS && env.PRIVATE_ACTIVATION === 'owner-verified' ? response('', 303, { Location: '/account/signin' }) : response(accountPage());
+      if (path === '/account' && request.method === 'GET') {
+        try { if (!handle) throw new AccessDenied(); await current(env, handle); }
+        catch { return env.ACCOUNT_BROWSER_SESSIONS && env.PRIVATE_ACTIVATION === 'owner-verified' ? response('', 303, { Location: '/account/signin' }) : response(accountPage()); }
+      }
       // A valid retired-handle tombstone may still cancel a replacement that won the callback race.
       // Revoke-all is stricter: the authority DO requires a currently active session.
       if (request.method === 'POST' && (path === '/account/signout' || path === '/account/revoke-all-local-browser-sessions')) {
