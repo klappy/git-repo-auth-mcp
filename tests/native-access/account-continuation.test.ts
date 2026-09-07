@@ -203,3 +203,17 @@ it('native durable spend survives injected failure before completion and a full 
     expect((await call({ handle: active.handle, ref: c.ref }, '/__fault-after-spend')).status).toBe(500); // Test-only uncaught repeat spend; no code redirect.
   } finally { await mf.dispose(); await rm(dir, { recursive: true, force: true }); }
 }, 30000);
+
+it('retired leftover continuation cookie does not block rendered sign-in', async () => {
+  const output = await build({ stdin: { contents: `export {AccountBrowserSessions} from './account/browser-session';import {createAccountRoutes} from './account/account-routes';const routes=createAccountRoutes();export default{async fetch(r,e){if(new URL(r.url).pathname.startsWith('/account'))return routes(r,{...e,ACCOUNT_ISSUER:'https://fixture.invalid'},async()=>new Response('',{status:403}));return e.ACCOUNT_BROWSER_SESSIONS.get(e.ACCOUNT_BROWSER_SESSIONS.idFromName('account-authority-v2')).fetch(r)}}`, resolveDir: process.cwd(), loader: 'ts' }, bundle: true, write: false, format: 'esm', platform: 'browser', external: ['cloudflare:workers'] });
+  const mf = new Miniflare({ modules: true, script: output.outputFiles[0].text, compatibilityDate: '2026-06-16', host: '127.0.0.1', port: 0, cf: false, bindings: { BROWSER_SESSION_KEY_HEX: 'ab'.repeat(32), PRIVATE_ACTIVATION: 'owner-verified', RESOURCE: intent.resource }, durableObjects: { ACCOUNT_BROWSER_SESSIONS: { className: 'AccountBrowserSessions', useSQLite: true } } });
+  try {
+    const call = (body: unknown) => mf.dispatchFetch('https://fixture.invalid/', { method: 'POST', body: JSON.stringify(body) });
+    const created = await (await call({ operation: 'continuation-create', handle: browser, intent })).json() as { ref: string };
+    expect(created.ref).toMatch(/^[a-f0-9]{64}$/);
+    expect((await call({ operation: 'continuation-retire', handle: browser, ref: created.ref })).status).toBe(200);
+    const poisoned = await mf.dispatchFetch('https://fixture.invalid/account/signin', { headers: { Cookie: '__Host-account_browser=' + browser + '; __Host-account_continuation=' + created.ref } }), html = await poisoned.text();
+    expect(poisoned.status).toBe(200); expect(html).toContain('Sign in with GitHub'); expect(html).not.toContain('name="continuation"');
+    expect([...poisoned.headers.getSetCookie()].join('\n')).toMatch(/__Host-account_continuation=;/);
+  } finally { await mf.dispose(); }
+}, 30000);

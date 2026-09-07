@@ -21,6 +21,7 @@ const continuationCookie = (request: Request) => cookie(request, '__Host-account
 function single(form: URLSearchParams, key: string) { if (form.getAll(key).length > 1) throw new AccessDenied(); return form.get(key) ?? ''; }
 function intentUrl(intent: ContinuationIntent, env: AccountBrowserEnv) { const url = new URL('/authorize', env.ACCOUNT_ISSUER); url.search = new URLSearchParams({ client_id: intent.clientId, redirect_uri: intent.redirectUri, state: intent.state, response_type: intent.responseType, scope: intent.scope.join(' '), resource: intent.resource, code_challenge: intent.codeChallenge, code_challenge_method: intent.codeChallengeMethod }).toString(); return url.toString(); }
 async function continuation(env: AccountBrowserEnv, browserHandle: string, ref: string, activeHandle?: string) { return browser(env, { operation: 'continuation-load', handle: browserHandle, ref, activeHandle }) as Promise<{ intent: ContinuationIntent; expiresAt: number; stage: string }>; }
+async function boundContinuation(env: AccountBrowserEnv, browserHandle: string, ref: string | undefined, activeHandle?: string) { if (!ref) return; try { await continuation(env, browserHandle, ref, activeHandle); return ref; } catch { /* Leftover cookie is not a live slot. */ } }
 async function providerHelpers(env: AccountBrowserEnv) { if (!env.ACCOUNT_CONNECTOR_KV) throw new AccessDenied(); const { getOAuthApi } = await import('@cloudflare/workers-oauth-provider'); return getOAuthApi({ apiRoute: env.RESOURCE, apiHandler: { fetch: () => new Response('', { status: 403 }) }, defaultHandler: { fetch: () => new Response('', { status: 403 }) }, authorizeEndpoint: env.ACCOUNT_ISSUER + '/authorize', tokenEndpoint: env.ACCOUNT_ISSUER + '/token', resourceMatchOriginOnly: false }, { ...env, OAUTH_KV: env.ACCOUNT_CONNECTOR_KV }); }
 export async function accountAssertion(session: BrowserSession, env: AccountBrowserEnv, handle: string) {
   await browser(env, { operation: 'verify', identity: session.identity });
@@ -60,9 +61,12 @@ export function createAccountRoutes(adapter?: LoginAdapter) {
         if (activeHandle) { try { active = await current(env, activeHandle); } catch { activeHandle = ''; } }
         const handle = active ? active.browserHandle : cookie(request, '__Host-account_browser') || opaque();
         if (!/^[a-f0-9]{64}$/.test(handle)) throw new AccessDenied();
-        const continuationRef = continuationCookie(request);
+        const requested = continuationCookie(request);
+        const continuationRef = await boundContinuation(env, handle, requested, activeHandle || undefined);
         const pending = await browser(env, { operation: 'begin', handle, activeHandle: activeHandle || undefined, continuationRef }) as { nonce: string };
-        return response(accountPage({ loginCsrf: pending.nonce, continuationRef }), 200, { 'Set-Cookie': setCookie('__Host-account_browser', handle, 300) });
+        const result = response(accountPage({ loginCsrf: pending.nonce, continuationRef }), 200, { 'Set-Cookie': setCookie('__Host-account_browser', handle, 300) });
+        if (requested && !continuationRef) result.headers.append('Set-Cookie', setCookie('__Host-account_continuation', '', 0));
+        return result;
       }
       if (path === '/account/callback') {
         if (env.PRIVATE_ACTIVATION !== 'owner-verified' || request.method !== 'GET' || url.origin + path !== env.ACCOUNT_LOGIN_CALLBACK) throw new AccessDenied();
@@ -110,7 +114,7 @@ export function createAccountRoutes(adapter?: LoginAdapter) {
         if (request.headers.get('Origin') !== new URL(env.ACCOUNT_ISSUER).origin || Number(request.headers.get('content-length') ?? 0) > 4096) throw new AccessDenied();
         const text = await request.text(); if (text.length > 4096) throw new AccessDenied();
         const form = new URLSearchParams(text), csrf = single(form, 'csrf'); formContinuation = single(form, 'continuation') || undefined;
-        if (path === '/account/repositories/connect' && formContinuation !== continuationCookie(request)) throw new AccessDenied();
+        if (path === '/account/repositories/connect' && formContinuation !== continuationCookie(request)) { if (formContinuation || await boundContinuation(env, session.browserHandle, continuationCookie(request), handle)) throw new AccessDenied(); }
         if (formContinuation) await continuation(env, session.browserHandle, formContinuation, handle);
         await browser(env, { operation: 'csrf', handle, nonce: csrf });
       }
@@ -147,7 +151,7 @@ export function createAccountRoutes(adapter?: LoginAdapter) {
         const targetUrl = new URL((await result.json() as { authorizationUrl: string }).authorizationUrl);
         if (targetUrl.origin !== 'https://github.com' || targetUrl.pathname !== '/login/oauth/authorize' || !targetUrl.searchParams.get('state')) throw new AccessDenied();
         await browser(env, { operation: 'repository-state', handle, nonce: targetUrl.searchParams.get('state'), continuationRef: formContinuation });
-        return response('', 303, { Location: targetUrl.toString() });
+        return response('', 303, { Location: targetUrl.toString(), ...(!formContinuation && continuationCookie(request) ? { 'Set-Cookie': setCookie('__Host-account_continuation', '', 0) } : {}) });
       }
       throw new AccessDenied();
     } catch { if (activationProof) { try { await browser(env, { operation: 'discard', proof: activationProof }); } catch { /* Failed cleanup is still a denied callback; proof remains bounded and token-free. */ } } if (continuationCookie(request)) return continuationUnavailable(503); return response('<!doctype html><html lang="en"><title>Account unavailable</title><main><h1>Account request could not be confirmed</h1><p>If a connection was in progress, check your account before retrying: an interrupted response does not prove the connection was rolled back. Sign in again to recover the same GitHub identity. To switch accounts, sign out first. Public access remains available.</p><a href="/account">Check account</a><p><a href="/account/signin">Sign in again</a></p><p><a href="/account/public">Continue with public access</a></p></main></html>', 503); }
@@ -210,7 +214,7 @@ export function createAccountConsent(_adapter?: LoginAdapter) {
       if (decision === 'deny') {
         if (continuationRef) await browser(env, { operation: 'continuation-retire', handle: session.browserHandle, ref: continuationRef });
         const denied = new URL(auth.redirectUri); denied.searchParams.set('error', 'access_denied'); if (auth.state) denied.searchParams.set('state', auth.state);
-        return response('', 303, { Location: denied.toString() });
+        return response('', 303, { Location: denied.toString(), ...(continuationRef ? { 'Set-Cookie': setCookie('__Host-account_continuation', '', 0) } : {}) });
       }
       if (decision !== 'approve') throw new AccessDenied();
       const completed = await browser(env, { operation: 'commit-connector', handle, proof: { handle, generation: session.generation, accountEpoch: session.accountEpoch, subject: session.identity.subject, githubId: session.identity.githubId }, ...(continuationRef ? { continuationRef } : { authorizationUrl }), assertion: authz.assertion }) as { redirectTo: string };
