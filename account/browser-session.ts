@@ -5,9 +5,10 @@ import type { IdentityTransaction } from './oauth';
 import type { BrowserGrantProof } from './grants';
 import type { AccountEnv } from './broker';
 export interface BrowserSession { version: 2; identity: AccountIdentity; createdAt: number; verifiedAt: number; idleUntil: number; absoluteUntil: number; generation: number; accountEpoch: number; browser: string; browserHandle: string; csrf: string; status: 'active'; repositoryState?: { state: string; expiresAt: number; continuationHash?: string }; }
-interface Ledger { generation: number; active?: string; pendingNonce?: string; stateBindings?: { stateHash: string; nonceHash: string; continuationHash?: string; expiresAt: number }[]; }
+interface Restart { refHash?: string; slotHash?: string; revision: number; generation: number; }
+interface Ledger { generation: number; slotRevision?: number; active?: string; pendingNonce?: string; stateBindings?: { stateHash: string; nonceHash: string; continuationHash?: string; restart?: Restart; expiresAt: number }[]; }
 interface Epoch { generation: number; revokedAtSequence: number; }
-interface Pending { version: 2; browser: string; browserHandle: string; nonce: string; expiresAt: number; generation: number; sequence: number; expected?: AccountIdentity; expectedEpoch?: number; transaction?: IdentityTransaction; continuationHash?: string; }
+interface Pending { version: 2; browser: string; browserHandle: string; nonce: string; expiresAt: number; generation: number; sequence: number; expected?: AccountIdentity; expectedEpoch?: number; transaction?: IdentityTransaction; continuationHash?: string; restart?: Restart; unbound?: Restart; }
 export interface ContinuationIntent { clientId: string; redirectUri: string; state: string; responseType: 'code'; codeChallenge: string; codeChallengeMethod: 'S256'; resource: string; scope: ['repository:read']; }
 interface Continuation { version: 1; refHash: string; browser: string; generation: number; sequence: number; expiresAt: number; stage: 'awaiting_identity' | 'awaiting_repository' | 'ready_for_connector' | 'spent'; expected?: AccountIdentity; expectedEpoch?: number; intent?: ContinuationIntent; }
 export function opaque() { return Array.from(crypto.getRandomValues(new Uint8Array(32)), n => n.toString(16).padStart(2, '0')).join(''); }
@@ -25,6 +26,21 @@ export class BrowserSessions {
     const result = await compactDecrypt(value, key, { keyManagementAlgorithms: ['dir'], contentEncryptionAlgorithms: ['A256GCM'] }); return JSON.parse(new TextDecoder().decode(result.plaintext));
   }
   private async epoch(tx: DurableObjectTransaction, subject: string): Promise<Epoch> { return await tx.get<Epoch>('epoch:v2:' + subject) ?? { generation: 0, revokedAtSequence: 0 }; }
+  private revision(ledger: Ledger) { const n = ledger.slotRevision === undefined ? 0 : ledger.slotRevision; if (!Number.isSafeInteger(n) || n < 0) throw new AccessDenied(); return n; }
+  private async bump(tx: DurableObjectTransaction, browser: string, supplied?: Ledger) { const ledger = supplied ?? await tx.get<Ledger>('browser:v2:' + browser); if (!ledger) throw new AccessDenied(); const n = this.revision(ledger); if (n === Number.MAX_SAFE_INTEGER) throw new AccessDenied(); ledger.slotRevision = n + 1; await tx.put('browser:v2:' + browser, ledger); }
+  private async terminal(tx: DurableObjectTransaction, browser: string, ledger: Ledger, refHash?: string) {
+    this.revision(ledger); const raw = await tx.get<string>('continuation:v2:' + browser); if (raw === undefined) return undefined; if (typeof raw !== 'string' || !raw) throw new AccessDenied();
+    const c = await this.open<Continuation>(raw);
+    if (c.version !== 1 || !refHash || c.refHash !== refHash || c.browser !== browser || c.generation !== ledger.generation || !Number.isSafeInteger(c.expiresAt) || !Number.isSafeInteger(c.sequence) || !['awaiting_identity', 'awaiting_repository', 'ready_for_connector', 'spent'].includes(c.stage) || (c.expiresAt > Date.now() && c.stage !== 'spent')) throw new AccessDenied();
+    if (Object.hasOwn(c, 'expected') && !c.expected) throw new AccessDenied();
+    if (c.expected) { await verifyIdentity(tx, c.expected); const epoch = await this.epoch(tx, c.expected.subject); if (!Number.isSafeInteger(c.expectedEpoch) || c.expectedEpoch !== epoch.generation || epoch.revokedAtSequence > c.sequence) throw new AccessDenied(); }
+    else if (c.expectedEpoch !== undefined || c.stage !== 'awaiting_identity') throw new AccessDenied();
+    return c;
+  }
+  private async checkRestart(tx: DurableObjectTransaction, browser: string, restart: Restart, ledger: Ledger) {
+    if (restart.generation !== ledger.generation || restart.revision !== this.revision(ledger)) throw new AccessDenied();
+    const c = await this.terminal(tx, browser, ledger, restart.refHash); if (c?.refHash !== restart.slotHash) throw new AccessDenied();
+  }
   private async valid(tx: DurableObjectTransaction, handle: string) {
     handleShape(handle); const key = 'session:v2:' + await hash(handle), raw = await tx.get<string>(key); if (!raw) throw new AccessDenied();
     const s = await this.open<BrowserSession>(raw), now = Date.now();
@@ -51,7 +67,7 @@ export class BrowserSessions {
       for (const [limitKey, limit] of [['continuation-attempt:v2:' + browser, 10], ['continuation-attempt:v2:global', 1000]] as const) { const window = Math.floor(Date.now() / 60000), counter = await tx.get<{ window: number; count: number }>(limitKey); const count = counter?.window === window ? counter.count + 1 : 1; if (count > limit) throw new AccessDenied(); await tx.put(limitKey, { window, count }); }
       const c: Continuation = { version: 1, refHash, browser, generation: ledger.generation, sequence: await tx.get<number>('revocation-sequence:v2') ?? 0, expiresAt: Date.now() + 300000, stage: 'awaiting_identity', intent, ...(s ? { expected: s.identity, expectedEpoch: s.accountEpoch } : {}) };
       if (new TextEncoder().encode(JSON.stringify(c)).byteLength > 8192) throw new AccessDenied();
-      await tx.put(key, ledger); await tx.put('continuation:v2:' + browser, await this.seal(c)); return { ref, expiresAt: c.expiresAt };
+      await this.bump(tx, browser, ledger); await tx.put('continuation:v2:' + browser, await this.seal(c)); return { ref, expiresAt: c.expiresAt };
     });
   }
   async loadContinuation(browserHandle: string, ref: string, sessionHandle?: string) {
@@ -62,23 +78,14 @@ export class BrowserSessions {
       return c; // Binding-only data, never a public response or a session issuance seam.
     });
   }
-  async vacantContinuation(browserHandle: string) {
-    handleShape(browserHandle);
-    return this.storage.transaction(async tx => {
-      const browser = await hash(browserHandle), raw = await tx.get<string>('continuation:v2:' + browser);
-      if (!raw) return { vacant: true };
-      const c = await this.open<Continuation>(raw), ledger = await tx.get<Ledger>('browser:v2:' + browser);
-      return { vacant: !(c.version === 1 && c.browser === browser && c.generation === ledger?.generation && c.expiresAt > Date.now() && c.stage !== 'spent' && c.intent) };
-    });
-  }
   async stageContinuation(handle: string, ref: string, next: 'awaiting_repository' | 'ready_for_connector') {
     handleShape(ref); return this.storage.transaction(async tx => {
       const s = (await this.valid(tx, handle)).session, c = await this.continuation(tx, s.browser, await hash(ref));
       if (!c.expected || c.expected.subject !== s.identity.subject || c.expectedEpoch !== s.accountEpoch || Date.now() - s.verifiedAt > 300000 || !['awaiting_repository', 'ready_for_connector'].includes(next) || (c.stage === 'ready_for_connector' && next !== c.stage)) throw new AccessDenied();
-      c.stage = next; await tx.put('continuation:v2:' + s.browser, await this.seal(c)); return { stage: c.stage };
+      c.stage = next; await this.bump(tx, s.browser); await tx.put('continuation:v2:' + s.browser, await this.seal(c)); return { stage: c.stage };
     });
   }
-  async retireContinuation(browserHandle: string, ref: string) { handleShape(browserHandle); handleShape(ref); return this.storage.transaction(async tx => { const key = 'continuation:v2:' + await hash(browserHandle), raw = await tx.get<string>(key); if (raw && (await this.open<Continuation>(raw)).refHash === await hash(ref)) await tx.delete(key); return { retired: true }; }); }
+  async retireContinuation(browserHandle: string, ref: string) { handleShape(browserHandle); handleShape(ref); return this.storage.transaction(async tx => { const browser = await hash(browserHandle), key = 'continuation:v2:' + browser, raw = await tx.get<string>(key); if (raw && (await this.open<Continuation>(raw)).refHash === await hash(ref)) { await this.bump(tx, browser); await tx.delete(key); } return { retired: true }; }); }
   async cancelContinuation(browserHandle: string, ref: string, nonce: string, activeHandle?: string) {
     handleShape(browserHandle); handleShape(ref); return this.storage.transaction(async tx => {
       const browser = await hash(browserHandle), c = await this.continuation(tx, browser, await hash(ref));
@@ -86,7 +93,7 @@ export class BrowserSessions {
       const pendingAuthorized = Boolean(nonce && ledger?.pendingNonce === nonce && ((pendingLease?.nonce === nonce && pendingLease.continuationHash === c.refHash && pendingLease.generation === c.generation && pendingLease.expiresAt > Date.now()) || ledger.stateBindings?.some(binding => binding.nonceHash === nonceHash && binding.continuationHash === c.refHash && binding.expiresAt > Date.now())));
       if (activeHandle) { const { key, session } = await this.valid(tx, activeHandle); if (session.browser !== browser || (session.csrf !== nonce && !pendingAuthorized)) throw new AccessDenied(); session.csrf = opaque(); await tx.put(key, await this.seal(session)); }
       else if (!pendingAuthorized) throw new AccessDenied();
-      await tx.delete('continuation:v2:' + browser);
+      await this.bump(tx, browser); await tx.delete('continuation:v2:' + browser);
       const pending = await tx.get<string>('pending:v2:' + browser); if (pending && (await this.open<Pending>(pending)).continuationHash === c.refHash) await tx.delete('pending:v2:' + browser);
       return { canceled: true };
     });
@@ -95,21 +102,33 @@ export class BrowserSessions {
     handleShape(ref); return this.storage.transaction(async tx => {
       const s = (await this.valid(tx, handle)).session, c = await this.continuation(tx, s.browser, await hash(ref));
       if (c.stage !== 'ready_for_connector' || !c.expected || c.expected.subject !== s.identity.subject || c.expectedEpoch !== s.accountEpoch || Date.now() - s.verifiedAt > 300000) throw new AccessDenied();
-      const intent = c.intent!; delete c.intent; c.stage = 'spent'; await tx.put('continuation:v2:' + s.browser, await this.seal(c)); return intent;
+      const intent = c.intent!; delete c.intent; c.stage = 'spent'; await this.bump(tx, s.browser); await tx.put('continuation:v2:' + s.browser, await this.seal(c)); return intent;
     });
   }
-  async begin(browser: string, activeHandle?: string, continuationRef?: string) {
+  async begin(browser: string, activeHandle?: string, continuationRef?: string, restart = false) {
     handleShape(browser);
+    if (continuationRef) handleShape(continuationRef);
     return this.storage.transaction(async tx => {
       let active: BrowserSession | undefined;
-      if (activeHandle) { active = (await this.valid(tx, activeHandle)).session; browser = active.browserHandle; }
+      if (activeHandle) {
+        if (restart) {
+          handleShape(activeHandle); const raw = await tx.get<string>('session:v2:' + await hash(activeHandle));
+          if (raw !== undefined) { if (typeof raw !== 'string' || !raw) throw new AccessDenied(); const s = await this.open<BrowserSession>(raw); if (s.version !== 2 || !['active', 'retired'].includes(s.status) || !Number.isSafeInteger(s.absoluteUntil) || (s.status === 'active' && (!Number.isSafeInteger(s.idleUntil) || !Number.isSafeInteger(s.createdAt)))) throw new AccessDenied(); if (s.status === 'active' && s.idleUntil > Date.now() && s.absoluteUntil > Date.now()) active = (await this.valid(tx, activeHandle)).session; }
+        } else active = (await this.valid(tx, activeHandle)).session;
+        if (active) { if (restart && active.browserHandle !== browser) throw new AccessDenied(); browser = active.browserHandle; }
+      }
       const browserHash = await hash(browser), ledgerKey = 'browser:v2:' + browserHash;
-      const ledger = await tx.get<Ledger>(ledgerKey) ?? { generation: 0 };
-      const cont = continuationRef ? await this.continuation(tx, browserHash, await hash(continuationRef)) : undefined;
+      const storedLedger = await tx.get<Ledger>(ledgerKey), ledger = storedLedger === undefined ? { generation: 0 } : storedLedger;
+      if (!ledger || !Number.isSafeInteger(ledger.generation) || ledger.generation < 0) throw new AccessDenied();
+      const refHash = continuationRef ? await hash(continuationRef) : undefined;
+      const cont = restart ? await this.terminal(tx, browserHash, ledger, refHash) : refHash ? await this.continuation(tx, browserHash, refHash) : undefined;
+      if (!restart && !refHash) await this.terminal(tx, browserHash, ledger);
       if (cont?.expected && active && (active.identity.subject !== cont.expected.subject || active.accountEpoch !== cont.expectedEpoch)) throw new AccessDenied();
       // Starting reauthentication does not retire the current session; a nonce is a separate lease.
       const pending: Pending = { version: 2, browser: browserHash, browserHandle: browser, nonce: opaque(), expiresAt: Date.now() + 300_000, generation: ledger.generation, sequence: await tx.get<number>('revocation-sequence:v2') ?? 0, ...(active ? { expected: active.identity, expectedEpoch: active.accountEpoch } : {}) };
-      if (cont) { pending.continuationHash = cont.refHash; pending.expiresAt = Math.min(pending.expiresAt, cont.expiresAt); if (cont.expected) { pending.expected = cont.expected; pending.expectedEpoch = cont.expectedEpoch; } }
+      if (restart) pending.restart = { refHash, slotHash: cont?.refHash, revision: this.revision(ledger), generation: ledger.generation };
+      else if (!refHash) pending.unbound = { revision: this.revision(ledger), generation: ledger.generation };
+      if (cont) { if (!restart) { pending.continuationHash = cont.refHash; pending.expiresAt = Math.min(pending.expiresAt, cont.expiresAt); } if (cont.expected) { pending.expected = cont.expected; pending.expectedEpoch = cont.expectedEpoch; } }
       for (const [limitKey, limit] of [['attempt:v2:' + browserHash, 10], ['attempt:v2:global', 1000]] as const) {
         const window = Math.floor(Date.now() / 60000), counter = await tx.get<{ window: number; count: number }>(limitKey);
         const count = counter?.window === window ? counter.count + 1 : 1; if (count > limit) throw new AccessDenied(); await tx.put(limitKey, { window, count });
@@ -119,16 +138,18 @@ export class BrowserSessions {
       return { nonce: pending.nonce, expiresAt: pending.expiresAt, browserHandle: browser };
     });
   }
-  async start(browser: string, nonce: string, transaction: IdentityTransaction, continuationRef?: string) {
+  async start(browser: string, nonce: string, transaction: IdentityTransaction, continuationRef?: string, restart = false) {
     handleShape(browser); const key = 'pending:v2:' + await hash(browser);
     return this.storage.transaction(async tx => {
       const raw = await tx.get<string>(key); if (!raw) throw new AccessDenied(); const p = await this.open<Pending>(raw);
       if (p.version !== 2 || p.nonce !== nonce || p.expiresAt <= Date.now() || p.transaction || transaction.kind !== 'identity-bootstrap' || transaction.expiresAt <= Date.now()) throw new AccessDenied();
-      const ledger = await tx.get<Ledger>('browser:v2:' + p.browser); if (ledger?.generation !== p.generation) throw new AccessDenied();
-      if (p.continuationHash) { if (!continuationRef || await hash(continuationRef) !== p.continuationHash) throw new AccessDenied(); await this.continuation(tx, p.browser, p.continuationHash); } else if (continuationRef) throw new AccessDenied();
+      const ledger = await tx.get<Ledger>('browser:v2:' + p.browser); if (ledger?.generation !== p.generation || ledger.pendingNonce !== nonce || Boolean(p.restart) !== restart) throw new AccessDenied();
+      if (p.unbound) await this.checkRestart(tx, p.browser, p.unbound, ledger);
+      if (p.restart) { if (p.restart.refHash !== (continuationRef ? await hash(continuationRef) : undefined)) throw new AccessDenied(); await this.checkRestart(tx, p.browser, p.restart, ledger); }
+      else if (p.continuationHash) { if (!continuationRef || await hash(continuationRef) !== p.continuationHash) throw new AccessDenied(); await this.continuation(tx, p.browser, p.continuationHash); } else if (continuationRef) throw new AccessDenied();
       // Retain only bounded hashes so a recognized old callback cannot burn a replacement Pending.
       const bindings = (ledger.stateBindings ?? []).filter(value => value.expiresAt > Date.now()); if (bindings.length >= 60) throw new AccessDenied();
-      bindings.push({ stateHash: await hash(transaction.state), nonceHash: await hash(nonce), continuationHash: p.continuationHash, expiresAt: p.expiresAt }); ledger.stateBindings = bindings; await tx.put('browser:v2:' + p.browser, ledger);
+      bindings.push({ stateHash: await hash(transaction.state), nonceHash: await hash(nonce), continuationHash: p.continuationHash, restart: p.restart, expiresAt: p.expiresAt }); ledger.stateBindings = bindings; await tx.put('browser:v2:' + p.browser, ledger);
       p.transaction = { ...transaction, expiresAt: Math.min(p.expiresAt, transaction.expiresAt) }; await tx.put(key, await this.seal(p)); return { started: true };
     });
   }
@@ -139,17 +160,33 @@ export class BrowserSessions {
       if (p.nonce !== nonce) throw new AccessDenied(); // Unknown browser nonce cannot cancel another flow.
       const stateHash = await hash(state), nonceHash = await hash(nonce);
       const known = (await tx.get<Ledger>('browser:v2:' + p.browser))?.stateBindings?.find(value => value.stateHash === stateHash);
-      if (known && (known.nonceHash !== nonceHash || known.continuationHash !== p.continuationHash)) throw new AccessDenied();
+      if (known && (known.nonceHash !== nonceHash || known.continuationHash !== p.continuationHash || JSON.stringify(known.restart) !== JSON.stringify(p.restart))) throw new AccessDenied();
+      if (p.restart) { const ledger = await tx.get<Ledger>('browser:v2:' + p.browser); if (!ledger || ledger.pendingNonce !== nonce) throw new AccessDenied(); await this.checkRestart(tx, p.browser, p.restart, ledger); }
+      if (p.unbound) { const ledger = await tx.get<Ledger>('browser:v2:' + p.browser); if (!ledger || ledger.pendingNonce !== nonce) throw new AccessDenied(); await this.checkRestart(tx, p.browser, p.unbound, ledger); }
       await tx.delete(key);
       if (p.version !== 2 || p.expiresAt <= Date.now() || !p.transaction || p.transaction.state !== state || (await tx.get<Ledger>('browser:v2:' + p.browser))?.generation !== p.generation) return undefined;
-      if (p.continuationHash) { if (!continuationRef || await hash(continuationRef) !== p.continuationHash) return undefined; try { await this.continuation(tx, p.browser, p.continuationHash); } catch { return undefined; } } else if (continuationRef) return undefined;
+      if (p.continuationHash) { if (!continuationRef || await hash(continuationRef) !== p.continuationHash) return undefined; try { await this.continuation(tx, p.browser, p.continuationHash); } catch { return undefined; } } else if (continuationRef && !p.restart) return undefined;
       const proof = opaque(); const transaction = p.transaction; delete p.transaction;
       await tx.delete(key); await tx.put('activation:v2:' + await hash(proof), await this.seal(p));
-      return { transaction, proof };
+      return { transaction, proof, continuation: Boolean(p.continuationHash), standalone: Boolean(p.restart) };
     });
     if (!result) throw new AccessDenied(); return result;
   }
   async discard(proof: string) { handleShape(proof); await this.storage.delete('activation:v2:' + await hash(proof)); }
+  async cancelRestart(browser: string, nonce: string, ref?: string) {
+    handleShape(browser); handleShape(nonce); if (ref) handleShape(ref);
+    return this.storage.transaction(async tx => {
+      const browserHash = await hash(browser), ledgerKey = 'browser:v2:' + browserHash, ledger = await tx.get<Ledger>(ledgerKey);
+      if (!ledger || ledger.pendingNonce !== nonce) throw new AccessDenied();
+      const raw = await tx.get<string>('pending:v2:' + browserHash), pending = raw ? await this.open<Pending>(raw) : undefined;
+      const nonceHash = await hash(nonce), retained = ledger.stateBindings?.find(b => b.nonceHash === nonceHash && b.expiresAt > Date.now() && b.restart);
+      const proof = pending?.nonce === nonce && pending.expiresAt > Date.now() ? pending : retained;
+      const restart = proof?.restart; if (!restart || restart.refHash !== (ref ? await hash(ref) : undefined)) throw new AccessDenied();
+      await this.checkRestart(tx, browserHash, restart, ledger);
+      if (pending && pending.nonce !== nonce) throw new AccessDenied();
+      if (pending) await tx.delete('pending:v2:' + browserHash); delete ledger.pendingNonce; await tx.put(ledgerKey, ledger); return { canceled: true };
+    });
+  }
   async activate(githubId: number, proof: string) {
     handleShape(proof); const handle = opaque(), key = 'session:v2:' + await hash(handle), proofKey = 'activation:v2:' + await hash(proof);
     let mismatched: { browser: string; refHash: string } | undefined;
@@ -157,16 +194,19 @@ export class BrowserSessions {
       const raw = await tx.get<string>(proofKey); if (!raw) throw new AccessDenied(); const p = await this.open<Pending>(raw);
       const ledgerKey = 'browser:v2:' + p.browser, ledger = await tx.get<Ledger>(ledgerKey);
       if (p.version !== 2 || !ledger || ledger.generation !== p.generation || ledger.pendingNonce !== p.nonce || p.expiresAt <= Date.now()) throw new AccessDenied();
+      if (p.restart) await this.checkRestart(tx, p.browser, p.restart, ledger);
+      if (p.unbound) await this.checkRestart(tx, p.browser, p.unbound, ledger);
       const identity = await resolveIdentity(tx, githubId), epoch = await this.epoch(tx, identity.subject);
       if (p.continuationHash && p.expected && (p.expected.subject !== identity.subject || p.expected.githubId !== githubId)) mismatched = { browser: p.browser, refHash: p.continuationHash };
       if (epoch.revokedAtSequence > p.sequence || (p.expected && (p.expected.subject !== identity.subject || p.expected.githubId !== githubId || p.expectedEpoch !== epoch.generation))) throw new AccessDenied();
       const cont = p.continuationHash ? await this.continuation(tx, p.browser, p.continuationHash) : undefined;
+      if (p.restart?.slotHash) { await this.bump(tx, p.browser, ledger); await tx.delete('continuation:v2:' + p.browser); }
       if (ledger.active) { const oldRaw = await tx.get<string>(ledger.active); if (oldRaw) { const old = await this.open<BrowserSession>(oldRaw); await tx.put(ledger.active, await this.seal({ version: 2, status: 'retired', browser: old.browser, csrf: old.csrf, absoluteUntil: old.absoluteUntil })); } }
       ledger.generation++; ledger.active = key; delete ledger.pendingNonce; const now = Date.now();
-      if (cont) { cont.generation = ledger.generation; cont.expected = identity; cont.expectedEpoch = epoch.generation; await tx.put('continuation:v2:' + p.browser, await this.seal(cont)); }
+      if (cont) { cont.generation = ledger.generation; cont.expected = identity; cont.expectedEpoch = epoch.generation; await this.bump(tx, p.browser, ledger); await tx.put('continuation:v2:' + p.browser, await this.seal(cont)); }
       const session: BrowserSession = { version: 2, identity, createdAt: now, verifiedAt: now, idleUntil: now + 1_800_000, absoluteUntil: now + 28_800_000, generation: ledger.generation, accountEpoch: epoch.generation, browser: p.browser, browserHandle: p.browserHandle, csrf: opaque(), status: 'active' };
       await tx.delete(proofKey); await tx.put(ledgerKey, ledger); await tx.put(key, await this.seal(session)); return { handle, csrf: session.csrf };
-    }).catch(async error => { await this.storage.delete(proofKey); if (mismatched) { const target = mismatched; await this.storage.transaction(async tx => { const key = 'continuation:v2:' + target.browser, raw = await tx.get<string>(key); if (raw && (await this.open<Continuation>(raw)).refHash === target.refHash) await tx.delete(key); }); } throw error; });
+    }).catch(async error => { await this.storage.delete(proofKey); if (mismatched) { const target = mismatched; await this.storage.transaction(async tx => { const key = 'continuation:v2:' + target.browser, raw = await tx.get<string>(key); if (raw && (await this.open<Continuation>(raw)).refHash === target.refHash) { await this.bump(tx, target.browser); await tx.delete(key); } }); } throw error; });
   }
   async load(handle: string) { return this.storage.transaction(async tx => (await this.valid(tx, handle)).session); }
   async verify(identity: AccountIdentity) { return this.storage.transaction(async tx => { await verifyIdentity(tx, identity); return identity; }); }
@@ -186,7 +226,7 @@ export class BrowserSessions {
       if (s.version !== 2 || s.csrf !== nonce || s.absoluteUntil <= Date.now()) throw new AccessDenied();
       if (all) { const active = (await this.valid(tx, handle)).session; const epoch = await this.epoch(tx, active.identity.subject), sequence = (await tx.get<number>('revocation-sequence:v2') ?? 0) + 1; await tx.put('revocation-sequence:v2', sequence); await tx.put('epoch:v2:' + active.identity.subject, { generation: epoch.generation + 1, revokedAtSequence: sequence }); }
       const ledgerKey = 'browser:v2:' + s.browser, ledger = await tx.get<Ledger>(ledgerKey); if (!ledger) throw new AccessDenied();
-      if (ledger.active) await tx.delete(ledger.active); ledger.generation++; delete ledger.active; await tx.put(ledgerKey, ledger); await tx.delete('pending:v2:' + s.browser); await tx.delete('continuation:v2:' + s.browser); await tx.delete(key);
+      if (ledger.active) await tx.delete(ledger.active); ledger.generation++; delete ledger.active; if (await tx.get('continuation:v2:' + s.browser)) await this.bump(tx, s.browser, ledger); await tx.put(ledgerKey, ledger); await tx.delete('pending:v2:' + s.browser); await tx.delete('continuation:v2:' + s.browser); await tx.delete(key);
     });
   }
 }
@@ -202,7 +242,7 @@ export class AccountBrowserSessions implements DurableObject {
       if (!Array.isArray(previous) || previous.length > 2) throw new AccessDenied();
       const store = new BrowserSessions(this.state.storage, decodeKey(this.env.BROWSER_SESSION_KEY_HEX), this.env.BROWSER_SESSION_KEY_ID, previous.map(p => { if (p.keyHex === this.env.VAULT_KEY_HEX) throw new AccessDenied(); return { id: p.id, key: decodeKey(p.keyHex), notAfter: p.notAfter }; }));
       const text = await request.text(); if (text.length > 16384) throw new AccessDenied();
-      const b = JSON.parse(text) as { operation: string; handle: string; activeHandle?: string; nonce: string; state: string; transaction: IdentityTransaction; githubId: number; identity: AccountIdentity; consume?: boolean; proof: string; continuationRef?: string; ref: string; intent: ContinuationIntent; next: 'awaiting_repository' | 'ready_for_connector' };
+      const b = JSON.parse(text) as { operation: string; handle: string; activeHandle?: string; nonce: string; state: string; transaction: IdentityTransaction; githubId: number; identity: AccountIdentity; consume?: boolean; proof: string; continuationRef?: string; restart?: boolean; ref: string; intent: ContinuationIntent; next: 'awaiting_repository' | 'ready_for_connector' };
       if (b.operation === 'commit-repository' || b.operation === 'commit-connector') {
         const value = JSON.parse(text) as { operation: string; handle: string; proof: BrowserGrantProof; candidateId?: string; assertion: string; authorizationUrl?: string; continuationRef?: string };
         // All provider I/O has already finished. This event gate linearizes final authorization
@@ -236,12 +276,12 @@ export class AccountBrowserSessions implements DurableObject {
       }
       if (b.operation === 'continuation-create') { if (b.intent.resource !== (this.env as BrowserEnv & AccountEnv).RESOURCE) throw new AccessDenied(); return Response.json(await store.createContinuation(b.handle, b.intent, b.activeHandle)); }
       if (b.operation === 'continuation-load') return Response.json(await store.loadContinuation(b.handle, b.ref, b.activeHandle));
-      if (b.operation === 'continuation-vacant') return Response.json(await store.vacantContinuation(b.handle));
       if (b.operation === 'continuation-stage') return Response.json(await store.stageContinuation(b.handle, b.ref, b.next));
       if (b.operation === 'continuation-retire') return Response.json(await store.retireContinuation(b.handle, b.ref));
       if (b.operation === 'continuation-cancel') return Response.json(await store.cancelContinuation(b.handle, b.ref, b.nonce, b.activeHandle));
-      if (b.operation === 'begin') return Response.json(await store.begin(b.handle, b.activeHandle, b.continuationRef));
-      if (b.operation === 'start') return Response.json(await store.start(b.handle, b.nonce, b.transaction, b.continuationRef));
+      if (b.operation === 'begin') return Response.json(await store.begin(b.handle, b.activeHandle, b.continuationRef, b.restart === true));
+      if (b.operation === 'restart-cancel') return Response.json(await store.cancelRestart(b.handle, b.nonce, b.continuationRef));
+      if (b.operation === 'start') return Response.json(await store.start(b.handle, b.nonce, b.transaction, b.continuationRef, b.restart === true));
       if (b.operation === 'consume') return Response.json(await store.consume(b.handle, b.nonce, b.state, b.continuationRef));
       if (b.operation === 'activate') return Response.json(await store.activate(b.githubId, b.proof));
       if (b.operation === 'discard') { await store.discard(b.proof); return Response.json({ discarded: true }); }
