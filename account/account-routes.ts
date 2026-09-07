@@ -21,7 +21,8 @@ const continuationCookie = (request: Request) => cookie(request, '__Host-account
 function single(form: URLSearchParams, key: string) { if (form.getAll(key).length > 1) throw new AccessDenied(); return form.get(key) ?? ''; }
 function intentUrl(intent: ContinuationIntent, env: AccountBrowserEnv) { const url = new URL('/authorize', env.ACCOUNT_ISSUER); url.search = new URLSearchParams({ client_id: intent.clientId, redirect_uri: intent.redirectUri, state: intent.state, response_type: intent.responseType, scope: intent.scope.join(' '), resource: intent.resource, code_challenge: intent.codeChallenge, code_challenge_method: intent.codeChallengeMethod }).toString(); return url.toString(); }
 async function continuation(env: AccountBrowserEnv, browserHandle: string, ref: string, activeHandle?: string) { return browser(env, { operation: 'continuation-load', handle: browserHandle, ref, activeHandle }) as Promise<{ intent: ContinuationIntent; expiresAt: number; stage: string }>; }
-async function boundContinuation(env: AccountBrowserEnv, browserHandle: string, ref: string | undefined, activeHandle?: string) { if (!ref) return; try { await continuation(env, browserHandle, ref, activeHandle); return ref; } catch { /* Leftover cookie is not a live slot. */ } }
+async function boundContinuation(env: AccountBrowserEnv, browserHandle: string, ref: string | undefined, activeHandle?: string) { if (!ref) return; try { await continuation(env, browserHandle, ref, activeHandle); return ref; } catch { /* This ref is not the current live slot. */ } }
+async function vacantContinuation(env: AccountBrowserEnv, browserHandle: string) { try { return (await browser(env, { operation: 'continuation-vacant', handle: browserHandle }) as { vacant: boolean }).vacant === true; } catch { /* A failed vacancy check is not proof the slot is gone. */ } }
 async function providerHelpers(env: AccountBrowserEnv) { if (!env.ACCOUNT_CONNECTOR_KV) throw new AccessDenied(); const { getOAuthApi } = await import('@cloudflare/workers-oauth-provider'); return getOAuthApi({ apiRoute: env.RESOURCE, apiHandler: { fetch: () => new Response('', { status: 403 }) }, defaultHandler: { fetch: () => new Response('', { status: 403 }) }, authorizeEndpoint: env.ACCOUNT_ISSUER + '/authorize', tokenEndpoint: env.ACCOUNT_ISSUER + '/token', resourceMatchOriginOnly: false }, { ...env, OAUTH_KV: env.ACCOUNT_CONNECTOR_KV }); }
 export async function accountAssertion(session: BrowserSession, env: AccountBrowserEnv, handle: string) {
   await browser(env, { operation: 'verify', identity: session.identity });
@@ -65,7 +66,7 @@ export function createAccountRoutes(adapter?: LoginAdapter) {
         const continuationRef = await boundContinuation(env, handle, requested, activeHandle || undefined);
         const pending = await browser(env, { operation: 'begin', handle, activeHandle: activeHandle || undefined, continuationRef }) as { nonce: string };
         const result = response(accountPage({ loginCsrf: pending.nonce, continuationRef }), 200, { 'Set-Cookie': setCookie('__Host-account_browser', handle, 300) });
-        if (requested && !continuationRef) result.headers.append('Set-Cookie', setCookie('__Host-account_continuation', '', 0));
+        if (requested && !continuationRef && await vacantContinuation(env, handle)) result.headers.append('Set-Cookie', setCookie('__Host-account_continuation', '', 0));
         return result;
       }
       if (path === '/account/callback') {
@@ -151,7 +152,7 @@ export function createAccountRoutes(adapter?: LoginAdapter) {
         const targetUrl = new URL((await result.json() as { authorizationUrl: string }).authorizationUrl);
         if (targetUrl.origin !== 'https://github.com' || targetUrl.pathname !== '/login/oauth/authorize' || !targetUrl.searchParams.get('state')) throw new AccessDenied();
         await browser(env, { operation: 'repository-state', handle, nonce: targetUrl.searchParams.get('state'), continuationRef: formContinuation });
-        return response('', 303, { Location: targetUrl.toString(), ...(!formContinuation && continuationCookie(request) ? { 'Set-Cookie': setCookie('__Host-account_continuation', '', 0) } : {}) });
+        return response('', 303, { Location: targetUrl.toString(), ...(!formContinuation && continuationCookie(request) && await vacantContinuation(env, session.browserHandle) ? { 'Set-Cookie': setCookie('__Host-account_continuation', '', 0) } : {}) });
       }
       throw new AccessDenied();
     } catch { if (activationProof) { try { await browser(env, { operation: 'discard', proof: activationProof }); } catch { /* Failed cleanup is still a denied callback; proof remains bounded and token-free. */ } } if (continuationCookie(request)) return continuationUnavailable(503); return response('<!doctype html><html lang="en"><title>Account unavailable</title><main><h1>Account request could not be confirmed</h1><p>If a connection was in progress, check your account before retrying: an interrupted response does not prove the connection was rolled back. Sign in again to recover the same GitHub identity. To switch accounts, sign out first. Public access remains available.</p><a href="/account">Check account</a><p><a href="/account/signin">Sign in again</a></p><p><a href="/account/public">Continue with public access</a></p></main></html>', 503); }

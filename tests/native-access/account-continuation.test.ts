@@ -36,6 +36,15 @@ it('exact continuation survives identity rotation, retains original intent and s
   await expect(restarted.loadContinuation(browser, c.ref, active.handle)).rejects.toThrow();
   await expect(restarted.spendContinuation(active.handle, c.ref)).rejects.toThrow();
 });
+it('vacant continuation stays false while a live successor occupies the slot', async () => {
+  const h = await setup(), old = await h.store.createContinuation(browser, intent);
+  expect(await h.store.vacantContinuation(browser)).toEqual({ vacant: false });
+  const next = await h.store.createContinuation(browser, { ...intent, state: 'replacement' });
+  await expect(h.store.loadContinuation(browser, old.ref)).rejects.toThrow();
+  expect(await h.store.vacantContinuation(browser)).toEqual({ vacant: false });
+  await h.store.retireContinuation(browser, next.ref);
+  expect(await h.store.vacantContinuation(browser)).toEqual({ vacant: true });
+});
 it('replacement during paused identity exchange cannot bind, consume or erase the new intent', async () => {
   const h = await setup(), old = await h.store.createContinuation(browser, intent), p = await h.store.begin(browser, undefined, old.ref), tx = transaction();
   await h.store.start(browser, p.nonce, tx, old.ref); const proof = await h.store.consume(browser, p.nonce, tx.state, old.ref);
@@ -215,5 +224,21 @@ it('retired leftover continuation cookie does not block rendered sign-in', async
     const poisoned = await mf.dispatchFetch('https://fixture.invalid/account/signin', { headers: { Cookie: '__Host-account_browser=' + browser + '; __Host-account_continuation=' + created.ref } }), html = await poisoned.text();
     expect(poisoned.status).toBe(200); expect(html).toContain('Sign in with GitHub'); expect(html).not.toContain('name="continuation"');
     expect([...poisoned.headers.getSetCookie()].join('\n')).toMatch(/__Host-account_continuation=;/);
+  } finally { await mf.dispose(); }
+}, 30000);
+
+it('stale sign-in does not clear a live replacement continuation cookie', async () => {
+  const output = await build({ stdin: { contents: `export {AccountBrowserSessions} from './account/browser-session';import {createAccountRoutes} from './account/account-routes';const routes=createAccountRoutes();export default{async fetch(r,e){if(new URL(r.url).pathname.startsWith('/account'))return routes(r,{...e,ACCOUNT_ISSUER:'https://fixture.invalid'},async()=>new Response('',{status:403}));return e.ACCOUNT_BROWSER_SESSIONS.get(e.ACCOUNT_BROWSER_SESSIONS.idFromName('account-authority-v2')).fetch(r)}}`, resolveDir: process.cwd(), loader: 'ts' }, bundle: true, write: false, format: 'esm', platform: 'browser', external: ['cloudflare:workers'] });
+  const mf = new Miniflare({ modules: true, script: output.outputFiles[0].text, compatibilityDate: '2026-06-16', host: '127.0.0.1', port: 0, cf: false, bindings: { BROWSER_SESSION_KEY_HEX: 'ab'.repeat(32), PRIVATE_ACTIVATION: 'owner-verified', RESOURCE: intent.resource }, durableObjects: { ACCOUNT_BROWSER_SESSIONS: { className: 'AccountBrowserSessions', useSQLite: true } } });
+  try {
+    const call = (body: unknown) => mf.dispatchFetch('https://fixture.invalid/', { method: 'POST', body: JSON.stringify(body) });
+    const old = await (await call({ operation: 'continuation-create', handle: browser, intent })).json() as { ref: string };
+    const next = await (await call({ operation: 'continuation-create', handle: browser, intent: { ...intent, state: 'replacement' } })).json() as { ref: string };
+    const stale = await mf.dispatchFetch('https://fixture.invalid/account/signin', { headers: { Cookie: '__Host-account_browser=' + browser + '; __Host-account_continuation=' + old.ref } }), html = await stale.text();
+    expect(stale.status).toBe(200); expect(html).toContain('Sign in with GitHub'); expect(html).not.toContain('name="continuation"');
+    expect([...stale.headers.getSetCookie()].join('\n')).not.toMatch(/__Host-account_continuation=;/);
+    expect((await call({ operation: 'continuation-load', handle: browser, ref: next.ref })).status).toBe(200);
+    expect((await call({ operation: 'continuation-vacant', handle: browser })).status).toBe(200);
+    expect(await (await call({ operation: 'continuation-vacant', handle: browser })).json()).toEqual({ vacant: false });
   } finally { await mf.dispose(); }
 }, 30000);

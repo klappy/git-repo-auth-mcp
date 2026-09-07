@@ -62,6 +62,15 @@ export class BrowserSessions {
       return c; // Binding-only data, never a public response or a session issuance seam.
     });
   }
+  async vacantContinuation(browserHandle: string) {
+    handleShape(browserHandle);
+    return this.storage.transaction(async tx => {
+      const browser = await hash(browserHandle), raw = await tx.get<string>('continuation:v2:' + browser);
+      if (!raw) return { vacant: true };
+      const c = await this.open<Continuation>(raw), ledger = await tx.get<Ledger>('browser:v2:' + browser);
+      return { vacant: !(c.version === 1 && c.browser === browser && c.generation === ledger?.generation && c.expiresAt > Date.now() && c.stage !== 'spent' && c.intent) };
+    });
+  }
   async stageContinuation(handle: string, ref: string, next: 'awaiting_repository' | 'ready_for_connector') {
     handleShape(ref); return this.storage.transaction(async tx => {
       const s = (await this.valid(tx, handle)).session, c = await this.continuation(tx, s.browser, await hash(ref));
@@ -227,6 +236,7 @@ export class AccountBrowserSessions implements DurableObject {
       }
       if (b.operation === 'continuation-create') { if (b.intent.resource !== (this.env as BrowserEnv & AccountEnv).RESOURCE) throw new AccessDenied(); return Response.json(await store.createContinuation(b.handle, b.intent, b.activeHandle)); }
       if (b.operation === 'continuation-load') return Response.json(await store.loadContinuation(b.handle, b.ref, b.activeHandle));
+      if (b.operation === 'continuation-vacant') return Response.json(await store.vacantContinuation(b.handle));
       if (b.operation === 'continuation-stage') return Response.json(await store.stageContinuation(b.handle, b.ref, b.next));
       if (b.operation === 'continuation-retire') return Response.json(await store.retireContinuation(b.handle, b.ref));
       if (b.operation === 'continuation-cancel') return Response.json(await store.cancelContinuation(b.handle, b.ref, b.nonce, b.activeHandle));
