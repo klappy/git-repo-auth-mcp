@@ -1,0 +1,20 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "native-account-broker-isolated",
+  "main": "broker.ts",
+  "compatibility_date": "2026-09-07",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "preview_urls": false,
+  "vars": {
+    "PRIVATE_ACTIVATION": "disabled",
+    "ACCOUNT_ISSUER": "https://account.example.test",
+    "SERVICE_ISSUER": "https://service.example.test",
+    "BROKER_AUDIENCE": "https://broker.example.test/read",
+    "RESOURCE": "https://navigator.example.test/mcp",
+    "SERVICE": "navigator",
+    "GITHUB_CALLBACK": "https://account.example.test/oauth/callback"
+  },
+  "durable_objects": { "bindings": [{ "name": "ACCOUNT_GRANTS", "class_name": "AccountGrantObject" }] },
+  "migrations": [{ "tag": "account-v1", "new_sqlite_classes": ["AccountGrantObject"] }]
+}

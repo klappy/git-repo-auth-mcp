@@ -1,0 +1,6 @@
+import {it,expect} from 'vitest';
+import {setup,input,context} from './helpers';
+it.each([2999,-1,2002])('conflicting/denied repository id %i cannot authorize',async id=>{const x=await setup();await expect(x.broker.read({...input,repository:{...input.repository,id}},context)).rejects.toThrow();expect(x.calls.length).toBe(id===-1?0:1);});
+it('B can read org-b but cannot retrieve A repositories',async()=>{const x=await setup(1002),ctx={...context,subject:'acct-B',githubId:1002};await expect(x.broker.read(input,ctx)).rejects.toThrow();const result=await x.broker.read({...input,repository:{owner:'org-b',name:'same-name',id:2003}},ctx);expect(result.subject).toBe('acct-B');});
+it('grant identity mismatch denies before provider dispatch',async()=>{const x=await setup();await expect(x.broker.read(input,{...context,githubId:1002})).rejects.toThrow();expect(x.calls).toHaveLength(0);});
+it('unknown owner-qualified repository resolves provider numeric ID; subsequent reads require it',async()=>{const x=await setup();const repository={owner:'org-a',name:'same-name'};expect((await x.broker.read({...input,action:'resolve_repository',repository},context)).repository.id).toBe(2002);const before=x.calls.length;await expect(x.broker.read({...input,repository},context)).rejects.toThrow();expect(x.calls.length).toBe(before);});
