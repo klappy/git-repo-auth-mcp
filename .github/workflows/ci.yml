@@ -50,6 +50,9 @@ jobs:
       - name: Unit tests
         run: npm test
 
+      - name: Validate native account bundle
+        run: npx wrangler deploy --dry-run --config account/wrangler.jsonc --outdir /tmp/native-account-bundle
+
   resolve-preview:
     name: Resolve preview URL
     runs-on: ubuntu-latest
