@@ -3,7 +3,9 @@
   "name": "native-account-broker-isolated",
   "main": "broker.ts",
   "compatibility_date": "2026-09-07",
-  "compatibility_flags": ["nodejs_compat"],
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
   "workers_dev": false,
   "preview_urls": false,
   "vars": {
@@ -15,6 +17,35 @@
     "SERVICE": "navigator",
     "GITHUB_CALLBACK": "https://account.example.test/oauth/callback"
   },
-  "durable_objects": { "bindings": [{ "name": "ACCOUNT_GRANTS", "class_name": "AccountGrantObject" }] },
-  "migrations": [{ "tag": "account-v1", "new_sqlite_classes": ["AccountGrantObject"] }]
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "ACCOUNT_GRANTS",
+        "class_name": "AccountGrantObject"
+      },
+      {
+        "name": "ACCOUNT_BROWSER_SESSIONS",
+        "class_name": "AccountBrowserSessions"
+      },
+      {
+        "name": "ACCOUNT_IDENTITY_REGISTRY",
+        "class_name": "AccountIdentityRegistry"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "account-v1",
+      "new_sqlite_classes": [
+        "AccountGrantObject"
+      ]
+    },
+    {
+      "tag": "account-browser-v1",
+      "new_sqlite_classes": [
+        "AccountBrowserSessions",
+        "AccountIdentityRegistry"
+      ]
+    }
+  ]
 }

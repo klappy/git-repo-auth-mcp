@@ -1,3 +1,6 @@
+import { accountRoutes } from './account-routes';
+export { AccountBrowserSessions } from './browser-session';
+export { AccountIdentityRegistry } from './identity-registry';
 import { createLocalJWKSet, importJWK, SignJWT, type JSONWebKeySet } from 'jose';
 import { AccessDenied, bearer, verifyAccount, verifySession, type SessionContext, type SessionPolicy } from './session';
 import { GitHubOAuth } from './oauth';
@@ -35,6 +38,7 @@ export class AccountBroker {
   }
 }
 export interface AccountEnv {
+  ACCOUNT_IDENTITY_REGISTRY?: DurableObjectNamespace;
   PRIVATE_ACTIVATION: string; ACCOUNT_GRANTS: DurableObjectNamespace;
   ACCOUNT_ISSUER: string; SERVICE_ISSUER: string; BROKER_AUDIENCE: string; RESOURCE: string; SERVICE: string;
   ACCOUNT_JWKS: string; SERVICE_JWKS: string; VAULT_KEY_HEX: string;
@@ -79,6 +83,13 @@ export class AccountGrantObject implements DurableObject {
       const key = Uint8Array.from(this.env.VAULT_KEY_HEX.match(/../g)!, s => parseInt(s, 16));
       this.vault ??= new GrantVault(store, key, context.subject);
       const oauth = new GitHubOAuth({ clientId: this.env.GITHUB_CLIENT_ID, clientSecret: this.env.GITHUB_CLIENT_SECRET, callback: this.env.GITHUB_CALLBACK, fetch });
+      if (url.pathname === '/internal/bootstrap' && request.method === 'POST') {
+        if (!this.env.ACCOUNT_IDENTITY_REGISTRY) throw new AccessDenied();
+        const registry = this.env.ACCOUNT_IDENTITY_REGISTRY;
+        const identity = await registry.get(registry.idFromName('identity-registry-v1')).fetch('https://internal.invalid/', { method: 'POST', body: JSON.stringify({ operation: 'verify', identity: { subject: context.subject, githubId: context.githubId } }) });
+        if (!identity.ok) throw new AccessDenied();
+        return Response.json(await this.vault.bootstrap(context.githubId), { headers: { 'Cache-Control': 'no-store' } });
+      }
       if (url.pathname === '/grant/status' && request.method === 'POST') {
         return Response.json({ generation: await this.vault.generation(context.githubId, context.generation) }, { headers: { 'Cache-Control': 'no-store' } });
       }
@@ -123,6 +134,7 @@ export const accountWorker = {
     // Health/docs remain callable during absent account configuration or provider outage.
     if (request.method === 'GET' && new URL(request.url).pathname === '/health') return Response.json({ service: 'account-broker', privateEnabled: env.PRIVATE_ACTIVATION === 'owner-verified' });
     try {
+      if (new URL(request.url).pathname.startsWith('/internal/')) throw new AccessDenied();
       if (env.PRIVATE_ACTIVATION !== 'owner-verified') throw new AccessDenied();
       const context = await contextFor(request, env);
       return env.ACCOUNT_GRANTS.get(env.ACCOUNT_GRANTS.idFromName(context.subject)).fetch(request);
@@ -173,6 +185,8 @@ export async function connectorSession(request: Request, env: AccountEnv, props:
 }
 export default {
   async fetch(request: Request, env: AccountEnv, ctx: ExecutionContext): Promise<Response> {
+    const account = await accountRoutes(request, env, r => accountWorker.fetch(r, env));
+    if (account) return account;
     if (!['/authorize', '/token', '/connector/session', '/.well-known/oauth-authorization-server', '/.well-known/oauth-protected-resource'].includes(new URL(request.url).pathname)) return accountWorker.fetch(request, env);
     try {
       if (env.PRIVATE_ACTIVATION !== 'owner-verified' || !env.ACCOUNT_CONNECTOR_KV) throw new AccessDenied();

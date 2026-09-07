@@ -37,6 +37,14 @@ export class GrantVault {
       if (await this.store.compareAndSwap(old?.generation, { generation, epoch: generation, status: 'revoked' }, old?.status)) return generation;
     }
   }
+  /** Called only after independent immutable identity verification on the same subject. */
+  async bootstrap(expectedId: number) {
+    const record = await this.store.get();
+    if (!record) return { generation: 1, status: 'absent' as const };
+    if (record.status === 'refreshing') throw new AccessDenied();
+    if (record.status === 'verified' && (await this.decrypt(record)).githubId !== expectedId) throw new AccessDenied();
+    return { generation: record.generation, status: record.status };
+  }
   async generation(expectedId: number, assertionGeneration: number) {
     const record = await this.store.get();
     if (!record || record.status !== 'verified' || assertionGeneration < record.epoch || assertionGeneration > record.generation || (await this.decrypt(record)).githubId !== expectedId) throw new AccessDenied();
