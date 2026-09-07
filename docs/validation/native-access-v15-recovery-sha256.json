@@ -51,7 +51,7 @@
     },
     {
       "path": "docs/validation/native-access-v15-source-return.md",
-      "sha256": "3aeb27fcec67fe32856c370f9362ceceb2e79b54b1839670f610ea01b0b2f6dd"
+      "sha256": "760d418d5f25035528d80450f734ce1f7155cc5cb93f5756db659f141c577e8d"
     },
     {
       "path": "package-lock.json",
@@ -63,7 +63,7 @@
     },
     {
       "path": "tests/native-access/account-browser-session.test.ts",
-      "sha256": "25ff31f92e7769bd8118885a261642e8154d41c078bb2e28ad7d7f69cfc65d65"
+      "sha256": "5fb0827e62a29f61ab5f31c689b46779e5d95f103ec3bca7cec49364a1543001"
     },
     {
       "path": "tests/native-access/account-final-authorization.test.ts",

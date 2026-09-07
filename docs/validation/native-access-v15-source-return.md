@@ -1,5 +1,19 @@
 # B1 v1.5 source return — first review candidate
 
+## Test-only CI correction — native redirect inspection
+
+Separate coordinator-authorized test repair started2026-09-07T18:40:10Z, partial18:45:10Z, cutoff18:50:10Z. It does not extend the expired prior source fire. Published source3aeb481b9370dc9636d5493f437316dbcc92b8e3 (PR62, CI run34151996068/job101836022404) reported npm ci/typecheckPASS and170testsPASS/1FAIL/11SKIP. The sole failure was the native sign-in POST assertion: expected303, observed200.
+
+The production response assertion was correct; the fixture omitted redirect:'manual'. Installed Miniflare constructs Request(input,init), whose observed default is redirect:'follow', and its DispatchFetchDispatcher sends cross-origin redirects through the global dispatcher. Therefore inspecting a303 without manual mode can follow GitHub authorization rather than return the redirect being tested. The exact CI response body/destination was not retained, so no claim about the actual followed page is made. This also plausibly explains prior local network approval errors; it does not prove their historical cause or any user cancellation.
+
+Safe independent diagnostic of the installed Miniflare mechanism used a tiny local redirect Worker and undici MockAgent.disableNetConnect(): only the exact GitHub authorize destination was intercepted with a synthetic200. Default dispatch returned200/SYNTHETIC_REDIRECT_DESTINATION; manual dispatch returned303 with the original Location; exactly1global mock hit, with all unmocked external network disabled. No real GitHub request, credential or live grant was involved.
+
+Changed test behavior only: explicit manual redirects for inspected sign-in and callback responses, unchanged303 and exact opaque Secure/HttpOnly cookie assertions, zero synthetic provider calls before the authorization redirect, and a provider fixture accepting only exact POST https://github.com/login/oauth/access_token and GET https://api.github.com/user. Every other synthetic destination/method throws; no permissive token response fallback remains. Production runtime bytes are unchanged.
+
+Author executed corrected focused native test through ordinary direct local exec:1PASS/4filteredSKIP, duration968ms; npm run typecheckEXIT0 and git diff --checkEXIT0. This is the corrected test's result, not a recovered outcome for earlier interrupted processes. Full native/account-host result, CI successor, continuation, provider/activation and release gates remain separate. No permission escalation, alternate credentials, production configuration, resource or grant changes were made.
+
+Learning: browser-redirect assertions must explicitly select manual redirect handling. A test-only Worker outbound mock does not constrain the test client's cross-origin redirect dispatcher. Verify both boundaries before calling a synthetic flow network-isolated.
+
 ## Recovery successor — disabled source, independent review required
 
 Recovered clean aaf4763 under coordinator's renewed bounded fire: observed start2026-09-07T18:02:39Z, partial18:12:39Z, cutoff18:32:39Z. Original17:46:00.918Z cutoff remains expired, not reset. User approval remains valid. A tooling cancellation is not evidence the user withdrew authorization. No new production/config/grant/registration/deployment authority is inferred.
