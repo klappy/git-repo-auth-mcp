@@ -31,7 +31,9 @@ export class BrowserSessions {
   private async terminal(tx: DurableObjectTransaction, browser: string, ledger: Ledger, refHash?: string) {
     this.revision(ledger); const raw = await tx.get<string>('continuation:v2:' + browser); if (raw === undefined) return undefined; if (typeof raw !== 'string' || !raw) throw new AccessDenied();
     const c = await this.open<Continuation>(raw);
-    if (c.version !== 1 || !refHash || c.refHash !== refHash || c.browser !== browser || c.generation !== ledger.generation || !Number.isSafeInteger(c.expiresAt) || !Number.isSafeInteger(c.sequence) || !['awaiting_identity', 'awaiting_repository', 'ready_for_connector', 'spent'].includes(c.stage) || (c.expiresAt > Date.now() && c.stage !== 'spent')) throw new AccessDenied();
+    if (c.version !== 1 || c.browser !== browser || c.generation !== ledger.generation || !Number.isSafeInteger(c.expiresAt) || !Number.isSafeInteger(c.sequence) || !['awaiting_identity', 'awaiting_repository', 'ready_for_connector', 'spent'].includes(c.stage) || (c.expiresAt > Date.now() && c.stage !== 'spent')) throw new AccessDenied();
+    if (!refHash) return undefined;
+    if (c.refHash !== refHash) throw new AccessDenied();
     if (Object.hasOwn(c, 'expected') && !c.expected) throw new AccessDenied();
     if (c.expected) { await verifyIdentity(tx, c.expected); const epoch = await this.epoch(tx, c.expected.subject); if (!Number.isSafeInteger(c.expectedEpoch) || c.expectedEpoch !== epoch.generation || epoch.revokedAtSequence > c.sequence) throw new AccessDenied(); }
     else if (c.expectedEpoch !== undefined || c.stage !== 'awaiting_identity') throw new AccessDenied();
