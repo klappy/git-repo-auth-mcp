@@ -28,7 +28,7 @@ export class BrowserSessions {
     const key = header.kid === this.keyId ? this.key : old?.key; if (!key || header.typ !== 'account-browser-v2+jwe') throw new AccessDenied();
     const result = await compactDecrypt(value, key, { keyManagementAlgorithms: ['dir'], contentEncryptionAlgorithms: ['A256GCM'] }); return JSON.parse(new TextDecoder().decode(result.plaintext));
   }
-  private async epoch(tx: DurableObjectTransaction, subject: string): Promise<Epoch> { return await tx.get<Epoch>('epoch:v2:' + subject) ?? { generation: 0, revokedAtSequence: 0 }; }
+  private async epoch(tx: DurableObjectTransaction, subject: string): Promise<Epoch> { const raw = await tx.get<Epoch>('epoch:v2:' + subject); if (raw === undefined) return { generation: 0, revokedAtSequence: 0 }; if (!raw || typeof raw !== 'object' || !Number.isSafeInteger(raw.generation) || raw.generation < 0 || !Number.isSafeInteger(raw.revokedAtSequence) || raw.revokedAtSequence < 0) throw new AccessDenied(); return raw; }
   private revision(ledger: Ledger) { const n = ledger.slotRevision === undefined ? 0 : ledger.slotRevision; if (!Number.isSafeInteger(n) || n < 0) throw new AccessDenied(); return n; }
   private async bump(tx: DurableObjectTransaction, browser: string, supplied?: Ledger) { const ledger = supplied ?? await tx.get<Ledger>('browser:v2:' + browser); if (!ledger) throw new AccessDenied(); const n = this.revision(ledger); if (n === Number.MAX_SAFE_INTEGER) throw new AccessDenied(); ledger.slotRevision = n + 1; await tx.put('browser:v2:' + browser, ledger); }
   private async terminal(tx: DurableObjectTransaction, browser: string, ledger: Ledger, refHash?: string, selectTerminal = false) {
@@ -60,6 +60,32 @@ export class BrowserSessions {
     const ledger = await tx.get<Ledger>('browser:v2:' + s.browser), epoch = await this.epoch(tx, s.identity.subject);
     if (ledger?.active !== key || ledger.generation !== s.generation || epoch.generation !== s.accountEpoch) throw new AccessDenied();
     return { key, session: s };
+  }
+  private async identityBinding(tx: DurableObjectTransaction, browserHandle: string, activeHandle?: string) {
+    let supplied: BrowserSession | undefined, suppliedKey: string | undefined;
+    if (activeHandle) {
+      handleShape(activeHandle); suppliedKey = 'session:v2:' + await hash(activeHandle); const raw = await tx.get<string>(suppliedKey);
+      if (raw === undefined) throw new AccessDenied();
+      if (raw !== undefined) { if (typeof raw !== 'string' || !raw) throw new AccessDenied(); supplied = await this.open<BrowserSession>(raw); if (supplied.status !== 'active' || !supplied.browserHandle) throw new AccessDenied(); if (browserHandle && browserHandle !== supplied.browserHandle) throw new AccessDenied(); browserHandle = supplied.browserHandle; }
+    }
+    handleShape(browserHandle); const browser = await hash(browserHandle), rawLedger = await tx.get<Ledger>('browser:v2:' + browser), ledger = rawLedger === undefined ? { generation: 0 } : rawLedger;
+    if (!ledger || !Number.isSafeInteger(ledger.generation) || ledger.generation < 0) throw new AccessDenied(); this.revision(ledger);
+    if (!ledger.active) { if (ledger.active !== undefined || supplied) throw new AccessDenied(); return { browserHandle, browser, ledger, session: undefined, usable: false, revoked: false }; }
+    if (typeof ledger.active !== 'string' || !/^session:v2:[a-f0-9]{64}$/.test(ledger.active) || (suppliedKey && suppliedKey !== ledger.active)) throw new AccessDenied();
+    const raw = await tx.get<string>(ledger.active); if (typeof raw !== 'string' || !raw) throw new AccessDenied(); const s = await this.open<BrowserSession>(raw), now = Date.now();
+    if (s.version !== 2 || s.status !== 'active' || s.browser !== browser || s.browserHandle !== browserHandle || s.generation !== ledger.generation || !Number.isSafeInteger(s.createdAt) || s.createdAt > now || !Number.isSafeInteger(s.verifiedAt) || s.verifiedAt > now || !Number.isSafeInteger(s.idleUntil) || s.idleUntil < s.createdAt || !Number.isSafeInteger(s.absoluteUntil) || s.absoluteUntil < s.createdAt || s.absoluteUntil > s.createdAt + 28800000 || !Number.isSafeInteger(s.accountEpoch) || s.accountEpoch < 0 || 'managed' in s) throw new AccessDenied();
+    handleShape(s.csrf); await verifyIdentity(tx, s.identity); const rawEpoch = await tx.get<Epoch>('epoch:v2:' + s.identity.subject), epoch = rawEpoch === undefined ? { generation: 0, revokedAtSequence: 0 } : rawEpoch; if (!epoch || typeof epoch !== 'object' || !Number.isSafeInteger(epoch.generation) || epoch.generation < 0 || !Number.isSafeInteger(epoch.revokedAtSequence) || epoch.revokedAtSequence < 0) throw new AccessDenied(); const revoked = s.accountEpoch !== epoch.generation;
+    return { browserHandle, browser, ledger, session: s, usable: Boolean(activeHandle) && !revoked && s.idleUntil > now && s.absoluteUntil > now, revoked };
+  }
+  async entry(browserHandle: string, activeHandle?: string, ref?: string) {
+    return this.storage.transaction(async tx => {
+      const b = await this.identityBinding(tx, browserHandle, activeHandle);
+      if (b.revoked) return { kind: 'revoked', ...(activeHandle && b.session!.absoluteUntil > Date.now() ? { signoutCsrf: b.session!.csrf } : {}) };
+      let live = false, terminal = false;
+      if (ref) { handleShape(ref); const raw = await tx.get<string>('continuation:v2:' + b.browser); if (raw !== undefined) { if (typeof raw !== 'string' || !raw) throw new AccessDenied(); const c = await this.open<Continuation>(raw); if (c.refHash !== await hash(ref)) throw new AccessDenied(); if (c.stage === 'spent' || c.expiresAt <= Date.now()) { await this.terminal(tx, b.browser, b.ledger, await hash(ref)); terminal = true; } else { const c = await this.continuation(tx, b.browser, await hash(ref)); if (c.expected && b.session && (c.expected.subject !== b.session.identity.subject || c.expectedEpoch !== b.session.accountEpoch)) throw new AccessDenied(); live = true; } } else terminal = true; }
+      else { const c = await this.terminal(tx, b.browser, b.ledger, undefined, true); terminal = Boolean(c); }
+      return { kind: b.usable ? 'active' : live ? 'live' : terminal ? 'terminal' : b.session ? 'verify' : 'anonymous', browserHandle: b.browserHandle };
+    });
   }
   private async continuation(tx: DurableObjectTransaction, browser: string, refHash: string) {
     const raw = await tx.get<string>('continuation:v2:' + browser); if (!raw) throw new AccessDenied();
@@ -118,17 +144,9 @@ export class BrowserSessions {
     });
   }
   async begin(browser: string, activeHandle?: string, continuationRef?: string, restart = false) {
-    handleShape(browser);
     if (continuationRef) handleShape(continuationRef);
     return this.storage.transaction(async tx => {
-      let active: BrowserSession | undefined;
-      if (activeHandle) {
-        if (restart) {
-          handleShape(activeHandle); const raw = await tx.get<string>('session:v2:' + await hash(activeHandle));
-          if (raw !== undefined) { if (typeof raw !== 'string' || !raw) throw new AccessDenied(); const s = await this.open<BrowserSession>(raw); if (s.version !== 2 || !['active', 'retired'].includes(s.status) || !Number.isSafeInteger(s.absoluteUntil) || (s.status === 'active' && (!Number.isSafeInteger(s.idleUntil) || !Number.isSafeInteger(s.createdAt)))) throw new AccessDenied(); if (s.status === 'active' && s.idleUntil > Date.now() && s.absoluteUntil > Date.now()) active = (await this.valid(tx, activeHandle)).session; }
-        } else active = (await this.valid(tx, activeHandle)).session;
-        if (active) { if (restart && active.browserHandle !== browser) throw new AccessDenied(); browser = active.browserHandle; }
-      }
+      const binding = await this.identityBinding(tx, browser, activeHandle); if (binding.revoked) throw new AccessDenied(); const active = binding.session; browser = binding.browserHandle;
       const browserHash = await hash(browser), ledgerKey = 'browser:v2:' + browserHash;
       const storedLedger = await tx.get<Ledger>(ledgerKey), ledger = storedLedger === undefined ? { generation: 0 } : storedLedger;
       if (!ledger || !Number.isSafeInteger(ledger.generation) || ledger.generation < 0) throw new AccessDenied();
@@ -387,6 +405,7 @@ export class AccountBrowserSessions implements DurableObject {
       if (b.operation === 'continuation-retire') return Response.json(await store.retireContinuation(b.handle, b.ref));
       if (b.operation === 'continuation-cancel') return Response.json(await store.cancelContinuation(b.handle, b.ref, b.nonce, b.activeHandle));
       if (b.operation === 'begin') return Response.json(await store.begin(b.handle, b.activeHandle, b.continuationRef, b.restart === true));
+      if (b.operation === 'entry') return Response.json(await store.entry(b.handle, b.activeHandle, b.continuationRef));
       if (b.operation === 'restart-cancel') return Response.json(await store.cancelRestart(b.handle, b.nonce, b.continuationRef));
       if (b.operation === 'start') return Response.json(await store.start(b.handle, b.nonce, b.transaction, b.continuationRef, b.restart === true));
       if (b.operation === 'consume') return Response.json(await store.consume(b.handle, b.nonce, b.state, b.continuationRef));

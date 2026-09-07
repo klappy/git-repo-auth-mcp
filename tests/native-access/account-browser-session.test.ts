@@ -44,10 +44,10 @@ it('actual local DO atomically establishes numeric identity and token-free sessi
     const next = await issue(browser, 1001, old.handle); expect((await call({ operation: 'load', handle: old.handle })).status).toBe(403);
     expect((await call({ operation: 'signout', handle: old.handle, nonce: old.csrf })).status).toBe(200); expect((await call({ operation: 'load', handle: next.handle })).status).toBe(403);
     const last = await issue(browser), waiting = await pending(browser, last.handle); await call({ operation: 'signout', handle: last.handle, nonce: last.csrf }); expect((await activate(waiting.proof)).status).toBe(403);
-    // Session-derived browser ownership wins over a missing/changed browser cookie.
+    // Missing browser cookie may use the authenticated session binding; disagreement denies.
     const current = await issue('6'.repeat(64));
     for (const suffix of ['', '; __Host-account_browser=' + '9'.repeat(64)]) {
-      const page = await mf.dispatchFetch('https://fixture.invalid/account/signin', { headers: { Cookie: '__Host-account_session=' + current.handle + suffix } }); expect(page.status).toBe(200); expect(page.headers.get('Set-Cookie')).toContain('__Host-account_browser=' + '6'.repeat(64));
+      const page = await mf.dispatchFetch('https://fixture.invalid/account/signin', { headers: { Cookie: '__Host-account_session=' + current.handle + suffix } }); expect(page.status).toBe(suffix ? 503 : 200); if (suffix) expect(page.headers.get('Set-Cookie')).toBeNull(); else expect(page.headers.get('Set-Cookie')).toContain('__Host-account_browser=' + '6'.repeat(64));
     }
     await mf.dispose(); const scan = async (path: string): Promise<void> => { for (const e of await readdir(path, { withFileTypes: true })) { const p = join(path, e.name); if (e.isDirectory()) await scan(p); else expect((await readFile(p)).includes(Buffer.from('INERT'))).toBe(false); } }; await scan(dir);
   } finally { await mf.dispose().catch(() => {}); await rm(dir, { recursive: true, force: true }); }

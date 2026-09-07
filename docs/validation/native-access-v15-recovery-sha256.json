@@ -3,11 +3,11 @@
   "files": [
     {
       "path": "account/account-routes.ts",
-      "sha256": "d6b157fc4152f580f7c75e4713a2afcf8318b5f8c2846349ae99a615715e6efe"
+      "sha256": "56d99a1be0502eaf55038601a5a088853e04abc64937246839d929db7f2febd2"
     },
     {
       "path": "account/account-ui.ts",
-      "sha256": "f9e9359b00e5fd1954a3099f6f01f5a5b55b1e889458f460a6d4ee4bca9fbdff"
+      "sha256": "1b09c584d13d1b1595ca4ce661029a4df5c969dbc78fc5e0d85213d5e70ed943"
     },
     {
       "path": "account/broker.ts",
@@ -15,7 +15,7 @@
     },
     {
       "path": "account/browser-session.ts",
-      "sha256": "306c3897769784f286ad127f100c21481966a594806f31bb493602c818b848fe"
+      "sha256": "4a7f5b9fe0ce1b64bc54c7ea5df3882aaad9b350b0dceb37492dfeae9730fffe"
     },
     {
       "path": "account/grants.ts",
@@ -35,7 +35,7 @@
     },
     {
       "path": "account/README.md",
-      "sha256": "9cf848d8da2ffe9749251f006284044ab9f1d3431e2bbba2818d5288ef000180"
+      "sha256": "85987eb7dea22023419d463bc9d5b4fa65bd04073c352449b5f8b60fa562bef6"
     },
     {
       "path": "account/wrangler.jsonc",
@@ -43,7 +43,7 @@
     },
     {
       "path": "docs/design/native-access-identity.md",
-      "sha256": "55fd51c947196f2909251f963f75285b80538277f693a0cedc043f0a6db7fa87"
+      "sha256": "6f9cc6e892e9498fbf24f2061fed8f57059bc1f4424a1a0553309fb766d5a1b4"
     },
     {
       "path": "docs/validation/native-access-provider-evidence.md",
@@ -51,7 +51,7 @@
     },
     {
       "path": "docs/validation/native-access-v15-source-return.md",
-      "sha256": "39d191462b475c138cc63664aba038213d3f07d1ae2c7f068dc876ca54771a6d"
+      "sha256": "913075e67df5881525e9cdf7b76866ec53d97a807bd851ea18e390a44f6b0e7b"
     },
     {
       "path": "package-lock.json",
@@ -63,7 +63,7 @@
     },
     {
       "path": "tests/native-access/account-browser-session.test.ts",
-      "sha256": "5fb0827e62a29f61ab5f31c689b46779e5d95f103ec3bca7cec49364a1543001"
+      "sha256": "e93eb534d0bc1735fd3813549a89ad4c57c63e04245cf8a700a4b1f252d56444"
     },
     {
       "path": "tests/native-access/account-continuation.test.ts",
@@ -72,6 +72,14 @@
     {
       "path": "tests/native-access/account-dashboard-recovery.test.ts",
       "sha256": "04443f00c629ca1cc8a31bc85602c9d9653fcbf6b98db79eb55ddb7256cd9f6a"
+    },
+    {
+      "path": "tests/native-access/account-entry-authority.test.ts",
+      "sha256": "7df58c8555d803402f16e4b8ea45d27d9ce61c09677de91ba7f40aebf6aea1b3"
+    },
+    {
+      "path": "tests/native-access/account-entry-recovery.test.ts",
+      "sha256": "4dedda2b95733fcb89c7ec8c91e0526608c2a66db468519da528f35c031f3e2e"
     },
     {
       "path": "tests/native-access/account-final-authorization.test.ts",
