@@ -1,4 +1,4 @@
-import { accountRoutes } from './account-routes';
+import { accountRoutes, accountConsent } from './account-routes';
 export { AccountBrowserSessions } from './browser-session';
 export { AccountIdentityRegistry } from './identity-registry';
 import { createLocalJWKSet, importJWK, SignJWT, type JSONWebKeySet } from 'jose';
@@ -195,7 +195,7 @@ export default {
       const provider = new OAuthProvider<ConnectorEnv>({
         apiRoute: env.RESOURCE,
         apiHandler: { fetch: (r, e, c) => connectorSession(r, e, (c as ExecutionContext & { props: unknown }).props) },
-        defaultHandler: { fetch: (r, e) => completeConnectorConsent(r, e, e.OAUTH_PROVIDER) },
+        defaultHandler: { fetch: async (r, e) => await accountConsent(r, e, e.OAUTH_PROVIDER, trusted => completeConnectorConsent(trusted, e, e.OAUTH_PROVIDER)) ?? completeConnectorConsent(r, e, e.OAUTH_PROVIDER) },
         authorizeEndpoint: `${env.ACCOUNT_ISSUER}/authorize`, tokenEndpoint: `${env.ACCOUNT_ISSUER}/token`,
         resourceMatchOriginOnly: false, resourceMetadata: { resource: env.RESOURCE, authorization_servers: [env.ACCOUNT_ISSUER] }, scopesSupported: ['repository:read'],
       });

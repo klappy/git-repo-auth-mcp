@@ -2,8 +2,8 @@ import { CompactEncrypt, compactDecrypt } from 'jose';
 import { AccessDenied } from './session';
 import { validateIdentity, type AccountIdentity } from './identity-registry';
 export interface ManagedTokens { access_token: string; refresh_token: string; expires_at: number; user: { id: string }; }
-export interface BrowserSession { identity: AccountIdentity; managed: ManagedTokens; createdAt: number; verifiedAt: number; idleUntil: number; absoluteUntil: number; generation: number; csrf: string; status: 'active' | 'refreshing'; repositoryState?: { state: string; expiresAt: number }; }
-interface Pending { browser: string; nonce: string; expiresAt: number; verifier?: string; started?: boolean; }
+export interface BrowserSession { identity: AccountIdentity; managed: ManagedTokens; createdAt: number; verifiedAt: number; idleUntil: number; absoluteUntil: number; generation: number; browser: string; browserHandle: string; csrf: string; status: 'active' | 'refreshing'; repositoryState?: { state: string; expiresAt: number }; }
+interface Pending { browser: string; browserHandle: string; nonce: string; expiresAt: number; verifier?: string; started?: boolean; generation: number; }
 export function opaque() { return Array.from(crypto.getRandomValues(new Uint8Array(32)), n => n.toString(16).padStart(2, '0')).join(''); }
 async function hash(value: string) { return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value))), n => n.toString(16).padStart(2, '0')).join(''); }
 export function projectManaged(value: unknown): ManagedTokens {
@@ -17,9 +17,15 @@ export class BrowserSessions {
   private async open<T>(value: string): Promise<T> { return JSON.parse(new TextDecoder().decode((await compactDecrypt(value, this.key, { keyManagementAlgorithms: ['dir'], contentEncryptionAlgorithms: ['A256GCM'] })).plaintext)); }
   async begin(browser: string) {
     if (!/^[a-f0-9]{64}$/.test(browser)) throw new AccessDenied();
-    const pending: Pending = { browser: await hash(browser), nonce: opaque(), expiresAt: Date.now() + 300_000 };
-    await this.storage.put('pending:' + pending.browser, await this.seal(pending));
-    return { nonce: pending.nonce, expiresAt: pending.expiresAt };
+    const browserHash = await hash(browser);
+    return this.storage.transaction(async tx => {
+      const ledger = await tx.get<{ generation: number; active?: string }>('browser:' + browserHash) ?? { generation: 0 };
+      ledger.generation++;
+      const pending: Pending = { browser: browserHash, browserHandle: browser, nonce: opaque(), expiresAt: Date.now() + 300_000, generation: ledger.generation };
+      await tx.put('browser:' + browserHash, ledger);
+      await tx.put('pending:' + browserHash, await this.seal(pending));
+      return { nonce: pending.nonce, expiresAt: pending.expiresAt };
+    });
   }
   async verifier(browser: string, nonce: string, verifier?: string) {
     const key = 'pending:' + await hash(browser);
@@ -45,15 +51,31 @@ export class BrowserSessions {
       const encrypted = await tx.get<string>(key); if (!encrypted) throw new AccessDenied();
       const p = await this.open<Pending>(encrypted);
       if (!p.started || p.nonce !== nonce || p.browser !== await hash(browser) || p.expiresAt <= Date.now()) throw new AccessDenied();
-      await tx.delete(key); return p;
+      const ledger = await tx.get<{ generation: number }>('browser:' + p.browser);
+      if (ledger?.generation !== p.generation) throw new AccessDenied();
+      const proof = opaque(); await tx.delete(key);
+      await tx.put('activation:' + await hash(proof), await this.seal(p));
+      return { verifier: p.verifier, proof };
     });
   }
-  async activate(identity: AccountIdentity, value: unknown) {
+  async activate(identity: AccountIdentity, value: unknown, proof: string) {
     validateIdentity(identity); const managed = projectManaged(value);
-    if (managed.user.id !== identity.subject || managed.expires_at * 1000 <= Date.now()) throw new AccessDenied();
-    const handle = opaque(), now = Date.now();
-    const session: BrowserSession = { identity, managed, createdAt: now, verifiedAt: now, idleUntil: now + 1_800_000, absoluteUntil: now + 28_800_000, generation: 1, csrf: opaque(), status: 'active' };
-    await this.storage.put('session:' + await hash(handle), await this.seal(session)); return { handle, csrf: session.csrf };
+    if (managed.user.id !== identity.subject || managed.expires_at * 1000 <= Date.now() || !/^[a-f0-9]{64}$/.test(proof)) throw new AccessDenied();
+    const handle = opaque(), sessionKey = 'session:' + await hash(handle), proofKey = 'activation:' + await hash(proof);
+    return this.storage.transaction(async tx => {
+      const raw = await tx.get<string>(proofKey); if (!raw) throw new AccessDenied();
+      const pending = await this.open<Pending>(raw), ledgerKey = 'browser:' + pending.browser;
+      const ledger = await tx.get<{ generation: number; active?: string }>(ledgerKey);
+      if (!ledger || ledger.generation !== pending.generation || pending.expiresAt <= Date.now()) throw new AccessDenied();
+      const now = Date.now();
+      const session: BrowserSession = { identity, managed, browser: pending.browser, browserHandle: pending.browserHandle, createdAt: now, verifiedAt: now, idleUntil: now + 1_800_000, absoluteUntil: now + 28_800_000, generation: 1, csrf: opaque(), status: 'active' };
+      if (ledger.active) {
+        const previous = await tx.get<string>(ledger.active);
+        if (previous) { const old = await this.open<BrowserSession>(previous); await tx.put(ledger.active, await this.seal({ status: 'retired', browser: old.browser, csrf: old.csrf, absoluteUntil: old.absoluteUntil })); }
+      }
+      ledger.active = sessionKey; await tx.delete(proofKey); await tx.put(ledgerKey, ledger); await tx.put(sessionKey, await this.seal(session));
+      return { handle, csrf: session.csrf };
+    });
   }
   async load(handle: string) {
     if (!/^[a-f0-9]{64}$/.test(handle)) throw new AccessDenied();
@@ -83,7 +105,39 @@ export class BrowserSessions {
       await tx.put(key, await this.seal(s)); return { accepted: true };
     });
   }
-  async invalidate(handle: string) { await this.storage.delete('session:' + await hash(handle)); }
+  async touch(handle: string) {
+    const key = 'session:' + await hash(handle);
+    return this.storage.transaction(async tx => {
+      const raw = await tx.get<string>(key); if (!raw) throw new AccessDenied(); const s = await this.open<BrowserSession>(raw), now = Date.now();
+      if (s.status !== 'active' || s.idleUntil <= now || s.absoluteUntil <= now || s.managed.expires_at * 1000 <= now) throw new AccessDenied();
+      s.idleUntil = Math.min(now + 1_800_000, s.absoluteUntil); s.verifiedAt = now;
+      await tx.put(key, await this.seal(s)); return s;
+    });
+  }
+  /** Origin is checked by the route; consume CSRF and retire browser authority atomically. */
+  async signout(handle: string, nonce: string) {
+    const key = 'session:' + await hash(handle);
+    await this.storage.transaction(async tx => {
+      const raw = await tx.get<string>(key); if (!raw) throw new AccessDenied();
+      const s = await this.open<{ browser: string; csrf: string; absoluteUntil: number }>(raw);
+      if (s.csrf !== nonce || s.absoluteUntil <= Date.now()) throw new AccessDenied();
+      const ledgerKey = 'browser:' + s.browser, ledger = await tx.get<{ generation: number; active?: string }>(ledgerKey);
+      if (!ledger) throw new AccessDenied();
+      if (ledger.active) await tx.delete(ledger.active);
+      ledger.generation++; delete ledger.active;
+      await tx.put(ledgerKey, ledger); await tx.delete('pending:' + s.browser); await tx.delete(key);
+    });
+  }
+  async invalidate(handle: string) {
+    const key = 'session:' + await hash(handle);
+    await this.storage.transaction(async tx => {
+      const raw = await tx.get<string>(key); if (!raw) return;
+      const s = await this.open<BrowserSession>(raw), ledgerKey = 'browser:' + s.browser;
+      const ledger = await tx.get<{ generation: number; active?: string }>(ledgerKey);
+      if (ledger?.active === key) { ledger.generation++; delete ledger.active; await tx.put(ledgerKey, ledger); await tx.delete('pending:' + s.browser); }
+      await tx.delete(key);
+    });
+  }
   /** Serialize refresh intent before provider IO. A crash leaves refreshing, never a reusable pair. */
   async refresh(handle: string, exchange: (old: ManagedTokens) => Promise<{ managed: ManagedTokens; identity: AccountIdentity }>) {
     const key = 'session:' + await hash(handle);
@@ -103,15 +157,17 @@ export class AccountBrowserSessions implements DurableObject {
     try {
       if (request.method !== 'POST' || !/^[a-f0-9]{64}$/.test(this.env.BROWSER_SESSION_KEY_HEX)) throw new AccessDenied();
       const store = new BrowserSessions(this.state.storage, Uint8Array.from(this.env.BROWSER_SESSION_KEY_HEX.match(/../g)!, n => parseInt(n, 16)));
-      const b = await request.json() as { operation: string; handle: string; nonce: string; identity: AccountIdentity; managed: ManagedTokens; consume?: boolean };
+      const b = await request.json() as { operation: string; handle: string; nonce: string; identity: AccountIdentity; managed: ManagedTokens; consume?: boolean; proof: string };
       if (b.operation === 'begin') return Response.json(await store.begin(b.handle));
       if (b.operation === 'start') return Response.json(await store.start(b.handle, b.nonce));
       if (b.operation === 'pending') return Response.json({ verifier: await store.verifier(b.handle, b.nonce) });
       if (b.operation === 'consume') return Response.json(await store.consume(b.handle, b.nonce));
-      if (b.operation === 'activate') return Response.json(await store.activate(b.identity, b.managed));
+      if (b.operation === 'activate') return Response.json(await store.activate(b.identity, b.managed, b.proof));
       if (b.operation === 'repository-state') return Response.json(await store.repositoryCallback(b.handle, b.nonce, b.consume));
+      if (b.operation === 'touch') return Response.json(await store.touch(b.handle));
       if (b.operation === 'load') return Response.json(await store.load(b.handle));
       if (b.operation === 'csrf') return Response.json(await store.csrf(b.handle, b.nonce));
+      if (b.operation === 'signout') { await store.signout(b.handle, b.nonce); return Response.json({ invalidated: true }); }
       if (b.operation === 'invalidate') { await store.invalidate(b.handle); return Response.json({ invalidated: true }); }
       throw new AccessDenied();
     } catch { return Response.json({ error: 'access_denied' }, { status: 403 }); }

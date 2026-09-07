@@ -1,7 +1,7 @@
 /* The account page is server-rendered; its minimal equivalent styles are embedded under CSP. */
 body { font: 18px system-ui; line-height: 1.6; max-width: 42rem; margin: auto; padding: 2rem; color: #17212b; background: #f6f8fa; }
-main { background: white; padding: 2rem; border: 1px solid #ccd3db; border-radius: 1rem; }
+main { overflow-wrap: anywhere; background: white; padding: 2rem; border: 1px solid #ccd3db; border-radius: 1rem; }
 button, a { font: inherit; }
-button { padding: .6rem 1rem; }
+button { padding: .6rem 1rem; margin: .25rem 0; }
 a { color: #075bb5; }
 form { margin: 1rem 0; }

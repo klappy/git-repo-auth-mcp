@@ -16,7 +16,7 @@ export class QuarantinedSdkStorage implements SupportedStorage {
 }
 export function managedSdk(url: string, publishableKey: string, storage: QuarantinedSdkStorage, transport: typeof fetch = (...args) => fetch(...args)) {
   if (new URL(url).protocol !== 'https:') throw new AccessDenied();
-  return createClient(url, publishableKey, { auth: { flowType: 'pkce', storageKey: 'account-managed', storage, persistSession: true, autoRefreshToken: false, detectSessionInUrl: false, debug: false }, global: { fetch: (...args) => transport(...args) } });
+  return createClient(url, publishableKey, { auth: { flowType: 'pkce', storageKey: 'account-managed', storage, persistSession: true, autoRefreshToken: false, detectSessionInUrl: false, debug: false }, global: { fetch: async (input, init) => { const response = await transport(input, { ...init, redirect: 'manual' }); if (response.status >= 300 && response.status < 400) { await response.body?.cancel(); return Response.json({ error: 'access_denied', error_description: 'Redirect refused by account transport' }, { status: 403 }); } return response; } } });
 }
 export interface VerifiedLogin { identity: AccountIdentity; managed: ManagedTokens; }
 export interface ManagedLoginAdapter {

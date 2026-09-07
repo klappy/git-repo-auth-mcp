@@ -17,3 +17,16 @@ it('pinned SDK quarantines initial and refreshed provider fields before storage 
   storage.discard(); await expect(productionLogin.begin({browser:'x',nonce:'x'})).rejects.toThrow(); await expect(productionLogin.complete({code:'x'})).rejects.toThrow();
   sdk.auth.stopAutoRefresh();
 });
+
+it('actual native SDK transport refuses redirect statuses without forwarding managed credentials', async () => {
+  const { build } = await import('esbuild'); const { Miniflare } = await import('miniflare');
+  const output = await build({ stdin: { contents: `import {managedSdk,QuarantinedSdkStorage} from './account/login';export default{async fetch(request){const sdk=managedSdk('https://managed.example.test','synthetic',new QuarantinedSdkStorage({getItem:k=>k.endsWith('-code-verifier')?JSON.stringify('f'.repeat(64)):null,setItem:()=>{},removeItem:()=>{}}));const path=new URL(request.url).pathname;const result=path==='/code'?await sdk.auth.exchangeCodeForSession('synthetic'):path==='/refresh'?await sdk.auth.refreshSession({refresh_token:'INERT_MANAGED_REFRESH'}):await sdk.auth.getUser('INERT_MANAGED_ACCESS');return Response.json({ok:!result.error})}}`, resolveDir: process.cwd(), loader: 'ts' }, bundle: true, write: false, format: 'esm', platform: 'browser' });
+  for (const status of [301, 302, 303, 307, 308]) {
+    const calls: string[] = [];
+    const mf = new Miniflare({ modules: true, script: output.outputFiles[0].text, compatibilityDate: '2026-06-16', compatibilityFlags: ['nodejs_compat'], cf: false, host: '127.0.0.1', port: 0, outboundService: (request: import('miniflare').Request) => { calls.push(new URL(request.url).pathname); return new Response('INERT_REDIRECT_BODY', { status, headers: { Location: 'https://managed.example.test/redirected?token=INERT_QUERY' } }); } });
+    try {
+      for (const path of ['/user', '/code', '/refresh']) { const result = await mf.dispatchFetch('https://fixture.invalid' + path); expect(await result.json()).toEqual({ ok: false }); }
+      expect(calls).toEqual(['/auth/v1/user', '/auth/v1/token', '/auth/v1/token']);
+    } finally { await mf.dispose(); }
+  }
+}, 30_000);
