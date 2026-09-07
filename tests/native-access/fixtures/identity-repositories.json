@@ -1,0 +1,9 @@
+{
+  "synthetic": true,
+  "users": [{"subject":"acct-A","githubId":1001,"repositories":[2001,2002,2003]}, {"subject":"acct-B","githubId":1002,"repositories":[2003]}],
+  "repositories": [
+    {"id":2001,"owner":"personal","name":"same-name","defaultBranch":"develop","path":"docs/cookbook.md","marker":"personal-learning-loop"},
+    {"id":2002,"owner":"org-a","name":"same-name","defaultBranch":"trunk","path":"docs/cookbook.md","marker":"org-a-learning-loop"},
+    {"id":2003,"owner":"org-b","name":"same-name","defaultBranch":"stable","path":"docs/cookbook.md","marker":"org-b-learning-loop"}
+  ]
+}
