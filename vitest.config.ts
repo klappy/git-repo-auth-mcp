@@ -13,5 +13,6 @@ const markdownAsText: Plugin = {
 
 export default defineConfig({
   assetsInclude: [],
+  test: { server: { deps: { inline: ['@cloudflare/workers-oauth-provider'] } }, include: ["test/**/*.test.ts", "tests/native-access/**/*.test.ts"] },
   plugins: [markdownAsText],
 });

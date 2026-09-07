@@ -17,6 +17,8 @@
   },
   "include": [
     "src/**/*.ts",
-    "test/**/*.ts"
+    "test/**/*.ts",
+    "account/**/*.ts",
+    "tests/native-access/**/*.ts"
   ]
 }
