@@ -2,16 +2,12 @@
   "base": "65ed85420683bf8470677c83d87527f4d97e369f",
   "files": [
     {
-      "path": "account/README.md",
-      "sha256": "f84dfe510b73c86eae66b6d8b79f6796fead5fd2c7df14c9964533607f5b9002"
-    },
-    {
       "path": "account/account-routes.ts",
-      "sha256": "1fa989215fbc5741b725cd078971cd78d522a2c3f539d6fc1f50a10b72b1eb70"
+      "sha256": "dfc5d29be64fa25e9d17f1525bda305ea793c5ca3bf579004634519cb210e308"
     },
     {
       "path": "account/account-ui.ts",
-      "sha256": "1d1ade96308cfc250f46591f512def58653ef249d52258246b81243960007ae8"
+      "sha256": "2300bcac8e0722ebc77e90349c40823a78778133896b399db4fb7aa10c117d3e"
     },
     {
       "path": "account/broker.ts",
@@ -19,7 +15,7 @@
     },
     {
       "path": "account/browser-session.ts",
-      "sha256": "8132670dfd3280b67a836287d8bb7948c3b02bf1925de28d7a642740e9f9740e"
+      "sha256": "6a00500d7c5adb5b27e2f4bf236c7ee5871a8dedcc0a69688b24beaad2684f76"
     },
     {
       "path": "account/grants.ts",
@@ -38,12 +34,16 @@
       "sha256": "1aeee047de97d3b8f190f851b908928ed12fed8292710279c2938c6c969877e6"
     },
     {
+      "path": "account/README.md",
+      "sha256": "dc57c49e11eddbbf12650fb7bbcfc1bbf0fc0506ce0861ef1ed46c49ccedc4e1"
+    },
+    {
       "path": "account/wrangler.jsonc",
       "sha256": "7eaa0f77dd44eb8fdd52e5288b1f8fd6ca5646425f3ae5e5ef3cb6159ddb256c"
     },
     {
       "path": "docs/design/native-access-identity.md",
-      "sha256": "d7276bd7a3e7a74f70706a95c47fa831b46caedfd83ae51e7ccd9a776e07d074"
+      "sha256": "de22aa1306107357c8c31edf8f3faa98aff08809b6a09958faef0d44d780e068"
     },
     {
       "path": "docs/validation/native-access-provider-evidence.md",
@@ -51,7 +51,7 @@
     },
     {
       "path": "docs/validation/native-access-v15-source-return.md",
-      "sha256": "760d418d5f25035528d80450f734ce1f7155cc5cb93f5756db659f141c577e8d"
+      "sha256": "6e84e7baba97ca066fc3e0d0f37346a1c264134c5868be56a9609d8285348725"
     },
     {
       "path": "package-lock.json",
@@ -64,6 +64,10 @@
     {
       "path": "tests/native-access/account-browser-session.test.ts",
       "sha256": "5fb0827e62a29f61ab5f31c689b46779e5d95f103ec3bca7cec49364a1543001"
+    },
+    {
+      "path": "tests/native-access/account-continuation.test.ts",
+      "sha256": "64e55b9b730384c63d997f7b25bd06151a09cf0bdd038caff93a7c4498c24c40"
     },
     {
       "path": "tests/native-access/account-final-authorization.test.ts",

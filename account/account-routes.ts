@@ -3,12 +3,13 @@ import type { AccountEnv } from './broker';
 import { AccessDenied } from './session';
 import { productionLogin, type LoginAdapter } from './login';
 import type { IdentityTransaction } from './oauth';
-import { opaque, type BrowserSession } from './browser-session';
+import { opaque, type BrowserSession, type ContinuationIntent } from './browser-session';
 import { accountPage, browserHeaders } from './account-ui';
 export interface AccountBrowserEnv extends AccountEnv { ACCOUNT_BROWSER_SESSIONS?: DurableObjectNamespace; ACCOUNT_IDENTITY_REGISTRY?: DurableObjectNamespace; ACCOUNT_LOGIN_CALLBACK?: string; }
 const cookie = (request: Request, name: string) => request.headers.get('Cookie')?.split(';').map(s => s.trim()).find(s => s.startsWith(name + '='))?.slice(name.length + 1) ?? '';
 const setCookie = (name: string, value: string, age = 1800) => `${name}=${value}; Secure; HttpOnly; SameSite=Lax; Path=/; Max-Age=${age}`;
 function response(body: string, status = 200, extra: Record<string, string> = {}) { return new Response(body, { status, headers: { ...browserHeaders(), 'Content-Type': 'text/html; charset=utf-8', ...extra } }); }
+function continuationUnavailable(status: number) { return response('<!doctype html><html lang="en"><title>Connection needs a new request</title><main><h1>Start a new connection from your connector</h1><p>This connection request expired, was replaced, was canceled, or could not be confirmed. It cannot be resumed again. Return to the connector and start a new connection request; this is not a request to reapprove the application design.</p><p>If completion was interrupted, its outcome may be unknown; no rollback is implied. Existing repository grants and connector sessions are separate from this request.</p><a href="/account/public">Continue with public access</a></main></html>', status); }
 async function internal(namespace: DurableObjectNamespace | undefined, name: string, value: unknown) {
   if (!namespace) throw new AccessDenied();
   const result = await namespace.get(namespace.idFromName(name)).fetch('https://internal.invalid/', { method: 'POST', body: JSON.stringify(value) });
@@ -16,6 +17,11 @@ async function internal(namespace: DurableObjectNamespace | undefined, name: str
 }
 async function browser(env: AccountBrowserEnv, value: unknown) { return internal(env.ACCOUNT_BROWSER_SESSIONS, 'account-authority-v2', value); }
 async function current(env: AccountBrowserEnv, handle: string, fresh = false): Promise<BrowserSession> { const s = await browser(env, { operation: 'load', handle }) as BrowserSession; if (s.version !== 2 || (fresh && Date.now() - s.verifiedAt > 300_000)) throw new AccessDenied(); return s; }
+const continuationCookie = (request: Request) => cookie(request, '__Host-account_continuation') || undefined;
+function single(form: URLSearchParams, key: string) { if (form.getAll(key).length > 1) throw new AccessDenied(); return form.get(key) ?? ''; }
+function intentUrl(intent: ContinuationIntent, env: AccountBrowserEnv) { const url = new URL('/authorize', env.ACCOUNT_ISSUER); url.search = new URLSearchParams({ client_id: intent.clientId, redirect_uri: intent.redirectUri, state: intent.state, response_type: intent.responseType, scope: intent.scope.join(' '), resource: intent.resource, code_challenge: intent.codeChallenge, code_challenge_method: intent.codeChallengeMethod }).toString(); return url.toString(); }
+async function continuation(env: AccountBrowserEnv, browserHandle: string, ref: string, activeHandle?: string) { return browser(env, { operation: 'continuation-load', handle: browserHandle, ref, activeHandle }) as Promise<{ intent: ContinuationIntent; expiresAt: number; stage: string }>; }
+async function providerHelpers(env: AccountBrowserEnv) { if (!env.ACCOUNT_CONNECTOR_KV) throw new AccessDenied(); const { getOAuthApi } = await import('@cloudflare/workers-oauth-provider'); return getOAuthApi({ apiRoute: env.RESOURCE, apiHandler: { fetch: () => new Response('', { status: 403 }) }, defaultHandler: { fetch: () => new Response('', { status: 403 }) }, authorizeEndpoint: env.ACCOUNT_ISSUER + '/authorize', tokenEndpoint: env.ACCOUNT_ISSUER + '/token', resourceMatchOriginOnly: false }, { ...env, OAUTH_KV: env.ACCOUNT_CONNECTOR_KV }); }
 export async function accountAssertion(session: BrowserSession, env: AccountBrowserEnv, handle: string) {
   await browser(env, { operation: 'verify', identity: session.identity });
   const jwk = JSON.parse(env.ACCOUNT_SIGNING_JWK);
@@ -38,7 +44,15 @@ export function createAccountRoutes(adapter?: LoginAdapter) {
     if (!path.startsWith('/account') && !repositoryCallback) return null;
     let activationProof: string | undefined;
     try {
-      if (path === '/account/public' && request.method === 'GET') return response('<!doctype html><html lang="en"><title>Public access</title><main><h1>Public access remains available</h1><p>Use your navigator’s public documentation and repositories without signing in.</p><a href="/account">Account access</a></main></html>');
+      if (path === '/account/public' && request.method === 'GET') return response('<!doctype html><html lang="en"><title>Public access</title><main><h1>Public access remains available</h1><p>Cartographer’s public explorer can be opened without this account sign-in. Private repositories require separate authorized access.</p><a href="https://cartographer.klappy.dev/explore.html">Open Cartographer public explorer</a><p><a href="/account">Account access</a></p></main></html>');
+      if (path === '/account/continuation/cancel' && request.method === 'POST') {
+        if (request.headers.get('Origin') !== new URL(env.ACCOUNT_ISSUER).origin) throw new AccessDenied();
+        const text = await request.text(); if (text.length > 4096) throw new AccessDenied(); const form = new URLSearchParams(text), ref = single(form, 'continuation');
+        if (!ref || ref !== continuationCookie(request)) throw new AccessDenied();
+        let activeHandle = cookie(request, '__Host-account_session'); try { await current(env, activeHandle); } catch { activeHandle = ''; }
+        await browser(env, { operation: 'continuation-cancel', handle: cookie(request, '__Host-account_browser'), ref, nonce: single(form, 'csrf'), activeHandle: activeHandle || undefined });
+        return response('', 303, { Location: '/account/public', 'Set-Cookie': setCookie('__Host-account_continuation', '', 0) });
+      }
       if (path === '/account/signin' && request.method === 'GET') {
         if (!env.ACCOUNT_BROWSER_SESSIONS || env.PRIVATE_ACTIVATION !== 'owner-verified') return response(accountPage());
         let activeHandle = cookie(request, '__Host-account_session');
@@ -46,33 +60,41 @@ export function createAccountRoutes(adapter?: LoginAdapter) {
         if (activeHandle) { try { active = await current(env, activeHandle); } catch { activeHandle = ''; } }
         const handle = active ? active.browserHandle : cookie(request, '__Host-account_browser') || opaque();
         if (!/^[a-f0-9]{64}$/.test(handle)) throw new AccessDenied();
-        const pending = await browser(env, { operation: 'begin', handle, activeHandle: activeHandle || undefined }) as { nonce: string };
-        return response(accountPage({ loginCsrf: pending.nonce }), 200, { 'Set-Cookie': setCookie('__Host-account_browser', handle, 300) });
+        const continuationRef = continuationCookie(request);
+        const pending = await browser(env, { operation: 'begin', handle, activeHandle: activeHandle || undefined, continuationRef }) as { nonce: string };
+        return response(accountPage({ loginCsrf: pending.nonce, continuationRef }), 200, { 'Set-Cookie': setCookie('__Host-account_browser', handle, 300) });
       }
       if (path === '/account/callback') {
         if (env.PRIVATE_ACTIVATION !== 'owner-verified' || request.method !== 'GET' || url.origin + path !== env.ACCOUNT_LOGIN_CALLBACK) throw new AccessDenied();
         const handle = cookie(request, '__Host-account_browser'), nonce = cookie(request, '__Host-account_login');
-        const pending = await browser(env, { operation: 'consume', handle, nonce, state: url.searchParams.get('state') ?? '' }) as { transaction: IdentityTransaction; proof: string };
+        const continuationRef = continuationCookie(request);
+        const pending = await browser(env, { operation: 'consume', handle, nonce, state: single(url.searchParams, 'state'), continuationRef }) as { transaction: IdentityTransaction; proof: string };
         activationProof = pending.proof;
         const code = url.searchParams.get('code'); if (!code || code.length > 2048) throw new AccessDenied();
         const verified = await login(adapter, env).complete({ url, transaction: pending.transaction });
         const active = await browser(env, { operation: 'activate', githubId: verified.githubId, proof: pending.proof }) as { handle: string };
         activationProof = undefined;
         await current(env, active.handle);
-        const result = response('', 303, { Location: '/account', 'Set-Cookie': setCookie('__Host-account_session', active.handle) });
+        const result = response('', 303, { Location: continuationRef ? '/account/continue' : '/account', 'Set-Cookie': setCookie('__Host-account_session', active.handle) });
         result.headers.append('Set-Cookie', setCookie('__Host-account_browser', handle, 28_800));
         result.headers.append('Set-Cookie', setCookie('__Host-account_login', '', 0));
         return result;
       }
       if (path === '/account/signin' && request.method === 'POST') {
         if (env.PRIVATE_ACTIVATION !== 'owner-verified' || request.headers.get('Origin') !== new URL(env.ACCOUNT_ISSUER).origin) throw new AccessDenied();
-        const handle = cookie(request, '__Host-account_browser'), text = await request.text(); if (text.length > 4096) throw new AccessDenied(); const nonce = new URLSearchParams(text).get('csrf') ?? '';
+        const handle = cookie(request, '__Host-account_browser'), text = await request.text(); if (text.length > 4096) throw new AccessDenied(); const form = new URLSearchParams(text), nonce = single(form, 'csrf'), continuationRef = single(form, 'continuation') || undefined;
+        if (continuationRef !== continuationCookie(request)) throw new AccessDenied();
         const start = await login(adapter, env).begin();
-        await browser(env, { operation: 'start', handle, nonce, transaction: start.transaction });
+        await browser(env, { operation: 'start', handle, nonce, transaction: start.transaction, continuationRef });
         const target = new URL(start.url); if (target.origin !== 'https://github.com' || target.pathname !== '/login/oauth/authorize') throw new AccessDenied();
         return response('', 303, { Location: target.toString(), 'Set-Cookie': setCookie('__Host-account_login', nonce, 300) });
       }
       const handle = cookie(request, '__Host-account_session');
+      if (path === '/account/continue' && request.method === 'GET') {
+        const ref = continuationCookie(request); if (!ref) throw new AccessDenied();
+        await continuation(env, cookie(request, '__Host-account_browser'), ref);
+        try { await current(env, handle, true); } catch { return response('', 303, { Location: '/account/signin' }); }
+      }
       if (path === '/account' && request.method === 'GET' && !handle) return env.ACCOUNT_BROWSER_SESSIONS && env.PRIVATE_ACTIVATION === 'owner-verified' ? response('', 303, { Location: '/account/signin' }) : response(accountPage());
       // A valid retired-handle tombstone may still cancel a replacement that won the callback race.
       // Revoke-all is stricter: the authority DO requires a currently active session.
@@ -80,27 +102,39 @@ export function createAccountRoutes(adapter?: LoginAdapter) {
         if (request.headers.get('Origin') !== new URL(env.ACCOUNT_ISSUER).origin) throw new AccessDenied();
         const text = await request.text(); if (text.length > 4096) throw new AccessDenied();
         await browser(env, { operation: path.endsWith('/signout') ? 'signout' : 'revoke-all-local-browser-sessions', handle, nonce: new URLSearchParams(text).get('csrf') ?? '' });
-        return response('', 303, { Location: '/account', 'Set-Cookie': setCookie('__Host-account_session', '', 0) });
+        const result = response('', 303, { Location: '/account', 'Set-Cookie': setCookie('__Host-account_session', '', 0) }); result.headers.append('Set-Cookie', setCookie('__Host-account_continuation', '', 0)); return result;
       }
       const session = await browser(env, { operation: 'load', handle }) as BrowserSession;
+      let formContinuation: string | undefined;
       if (request.method === 'POST') {
         if (request.headers.get('Origin') !== new URL(env.ACCOUNT_ISSUER).origin || Number(request.headers.get('content-length') ?? 0) > 4096) throw new AccessDenied();
         const text = await request.text(); if (text.length > 4096) throw new AccessDenied();
-        const csrf = new URLSearchParams(text).get('csrf') ?? '';
+        const form = new URLSearchParams(text), csrf = single(form, 'csrf'); formContinuation = single(form, 'continuation') || undefined;
+        if (path === '/account/repositories/connect' && formContinuation !== continuationCookie(request)) throw new AccessDenied();
+        if (formContinuation) await continuation(env, session.browserHandle, formContinuation, handle);
         await browser(env, { operation: 'csrf', handle, nonce: csrf });
       }
       await browser(env, { operation: 'touch', handle });
       const auth = await accountAssertion(session, env, handle);
+      if (path === '/account/continue' && request.method === 'GET') {
+        const ref = continuationCookie(request)!, c = await continuation(env, session.browserHandle, ref, handle);
+        const helpers = await providerHelpers(env), client = await helpers.lookupClient(c.intent.clientId);
+        if (!client || !client.redirectUris.includes(c.intent.redirectUri) || c.intent.resource !== env.RESOURCE) throw new AccessDenied();
+        await browser(env, { operation: 'continuation-stage', handle, ref, next: auth.state.status === 'verified' ? 'ready_for_connector' : 'awaiting_repository' });
+        if (auth.state.status !== 'verified') return response(accountPage({ subject: session.identity.subject, csrf: session.csrf, connected: false, continuationRef: ref }));
+        const { consentPage } = await import('./account-ui'); return response(consentPage({ client: client.clientName ?? c.intent.clientId, resource: env.RESOURCE, csrf: session.csrf, authorizationUrl: '', continuationRef: ref }));
+      }
       if (repositoryCallback) {
         if (request.method !== 'GET' || url.origin + path !== env.GITHUB_CALLBACK) throw new AccessDenied();
-        await browser(env, { operation: 'repository-state', handle, nonce: url.searchParams.get('state') ?? '', consume: true });
+        const continuationRef = continuationCookie(request);
+        await browser(env, { operation: 'repository-state', handle, nonce: single(url.searchParams, 'state'), consume: true, continuationRef });
         const proof = { handle, generation: session.generation, accountEpoch: session.accountEpoch, subject: session.identity.subject, githubId: session.identity.githubId };
         const result = await broker(new Request(url, { headers: { Authorization: 'Bearer ' + auth.assertion, 'X-Account-Browser-Proof': JSON.stringify(proof) } }));
         if (!result.ok) throw new AccessDenied();
         const candidate = await result.json() as { candidateId: string; subject: string };
         if (candidate.subject !== session.identity.subject) throw new AccessDenied();
-        await browser(env, { operation: 'commit-repository', handle, proof, candidateId: candidate.candidateId, assertion: auth.assertion });
-        return response('', 303, { Location: '/account' });
+        await browser(env, { operation: 'commit-repository', handle, proof, candidateId: candidate.candidateId, assertion: auth.assertion, continuationRef });
+        return response('', 303, { Location: continuationRef ? '/account/continue' : '/account' });
       }
       if (path === '/account' && request.method === 'GET') return response(accountPage({ subject: session.identity.subject, csrf: session.csrf, connected: auth.state.status === 'verified' }), 200, { 'Set-Cookie': setCookie('__Host-account_session', handle, Math.max(0, Math.min(1800, Math.floor((session.absoluteUntil - Date.now()) / 1000)))) });
       if (request.method === 'POST' && ['/account/disconnect', '/account/repositories/connect'].includes(path)) {
@@ -112,11 +146,11 @@ export function createAccountRoutes(adapter?: LoginAdapter) {
         if (path.endsWith('/disconnect')) return response('', 303, { Location: '/account' });
         const targetUrl = new URL((await result.json() as { authorizationUrl: string }).authorizationUrl);
         if (targetUrl.origin !== 'https://github.com' || targetUrl.pathname !== '/login/oauth/authorize' || !targetUrl.searchParams.get('state')) throw new AccessDenied();
-        await browser(env, { operation: 'repository-state', handle, nonce: targetUrl.searchParams.get('state') });
+        await browser(env, { operation: 'repository-state', handle, nonce: targetUrl.searchParams.get('state'), continuationRef: formContinuation });
         return response('', 303, { Location: targetUrl.toString() });
       }
       throw new AccessDenied();
-    } catch { if (activationProof) { try { await browser(env, { operation: 'discard', proof: activationProof }); } catch { /* Failed cleanup is still a denied callback; proof remains bounded and token-free. */ } } return response('<!doctype html><html lang="en"><title>Account unavailable</title><main><h1>Account request could not be confirmed</h1><p>If a connection was in progress, check your account before retrying: an interrupted response does not prove the connection was rolled back. Sign in again to recover the same GitHub identity. To switch accounts, sign out first. Public access remains available.</p><a href="/account">Check account</a><p><a href="/account/signin">Sign in again</a></p><p><a href="/account/public">Continue with public access</a></p></main></html>', 503); }
+    } catch { if (activationProof) { try { await browser(env, { operation: 'discard', proof: activationProof }); } catch { /* Failed cleanup is still a denied callback; proof remains bounded and token-free. */ } } if (continuationCookie(request)) return continuationUnavailable(503); return response('<!doctype html><html lang="en"><title>Account unavailable</title><main><h1>Account request could not be confirmed</h1><p>If a connection was in progress, check your account before retrying: an interrupted response does not prove the connection was rolled back. Sign in again to recover the same GitHub identity. To switch accounts, sign out first. Public access remains available.</p><a href="/account">Check account</a><p><a href="/account/signin">Sign in again</a></p><p><a href="/account/public">Continue with public access</a></p></main></html>', 503); }
   };
 }
 function login(adapter: LoginAdapter | undefined, env: AccountBrowserEnv): LoginAdapter {
@@ -130,26 +164,43 @@ export const accountRoutes = createAccountRoutes();
 export function createAccountConsent(_adapter?: LoginAdapter) {
   return async (request: Request, env: AccountBrowserEnv, helpers: import('@cloudflare/workers-oauth-provider').OAuthHelpers, complete: (request: Request) => Promise<Response>): Promise<Response | null> => {
     const handle = cookie(request, '__Host-account_session');
-    if (!handle) return request.method === 'GET' && env.PRIVATE_ACTIVATION === 'owner-verified' && env.ACCOUNT_BROWSER_SESSIONS
-      ? response('<!doctype html><html lang="en"><title>Sign in to connect</title><main><h1>Sign in to connect</h1><p>Sign in with GitHub and connect repository access, then return to your connector and retry. Public access remains available without signing in.</p><a href="/account/signin">Sign in with GitHub</a><p><a href="/account/public">Continue with public access</a></p></main></html>', 401)
-      : response(accountPage(), request.method === 'GET' ? 401 : 403);
+    if (!handle && request.method !== 'GET') return response(accountPage(), 403);
     try {
       const here = new URL(request.url);
       if (here.origin !== new URL(env.ACCOUNT_ISSUER).origin || here.pathname !== '/authorize') throw new AccessDenied();
-      let authorizationUrl = here.toString(), decision = '';
+      if (env.PRIVATE_ACTIVATION !== 'owner-verified') throw new AccessDenied();
+      let authorizationUrl = here.toString(), decision = '', continuationRef: string | undefined;
       if (request.method === 'POST') {
         if (request.headers.get('Origin') !== here.origin) throw new AccessDenied();
         const text = await request.text(); if (text.length > 8192) throw new AccessDenied();
-        const form = new URLSearchParams(text); authorizationUrl = form.get('authorizationUrl') ?? ''; decision = form.get('decision') ?? '';
-        await browser(env, { operation: 'csrf', handle, nonce: form.get('csrf') ?? '' });
+        const form = new URLSearchParams(text); continuationRef = single(form, 'continuation') || undefined; authorizationUrl = single(form, 'authorizationUrl'); decision = single(form, 'decision');
+        if (continuationRef !== continuationCookie(request)) throw new AccessDenied();
+        if (continuationRef) {
+          if (authorizationUrl || continuationRef !== continuationCookie(request)) throw new AccessDenied();
+          const s = await current(env, handle), c = await continuation(env, s.browserHandle, continuationRef, handle); authorizationUrl = intentUrl(c.intent, env);
+        }
+        await browser(env, { operation: 'csrf', handle, nonce: single(form, 'csrf') });
       } else if (request.method !== 'GET') throw new AccessDenied();
       const target = new URL(authorizationUrl);
       if (target.origin !== here.origin || target.pathname !== '/authorize') throw new AccessDenied();
+      const allowedParameters = ['client_id', 'redirect_uri', 'response_type', 'scope', 'state', 'resource', 'code_challenge', 'code_challenge_method'];
+      if ([...target.searchParams.keys()].some(key => !allowedParameters.includes(key) || target.searchParams.getAll(key).length !== 1)) throw new AccessDenied();
       const auth = await helpers.parseAuthRequest(new Request(target)), client = await helpers.lookupClient(auth.clientId);
       if (!client || !client.redirectUris.includes(auth.redirectUri) || auth.resource !== env.RESOURCE || auth.scope.length !== 1 || auth.scope[0] !== 'repository:read') throw new AccessDenied();
-      const session = await browser(env, { operation: 'load', handle }) as BrowserSession;
+      let session: BrowserSession | undefined;
+      try { session = await current(env, handle); } catch { /* GET may begin identity bootstrap, never authority. */ }
+      let authz = session && Date.now() - session.verifiedAt <= 300000 ? await accountAssertion(session, env, handle) : undefined;
+      if (request.method === 'GET' && (!session || Date.now() - session.verifiedAt > 300000 || authz?.state.status !== 'verified' || continuationCookie(request))) {
+        if (!env.ACCOUNT_BROWSER_SESSIONS || auth.responseType !== 'code' || auth.codeChallengeMethod !== 'S256' || !auth.codeChallenge || !auth.state) throw new AccessDenied();
+        const browserHandle = session?.browserHandle ?? (cookie(request, '__Host-account_browser') || opaque());
+        const intent: ContinuationIntent = { clientId: auth.clientId, redirectUri: auth.redirectUri, state: auth.state, responseType: 'code', codeChallenge: auth.codeChallenge, codeChallengeMethod: 'S256', resource: env.RESOURCE, scope: ['repository:read'] };
+        const created = await browser(env, { operation: 'continuation-create', handle: browserHandle, activeHandle: session ? handle : undefined, intent }) as { ref: string };
+        const result = response('', 303, { Location: '/account/continue', 'Set-Cookie': setCookie('__Host-account_browser', browserHandle, 28800) });
+        result.headers.append('Set-Cookie', setCookie('__Host-account_continuation', created.ref, 300)); return result;
+      }
+      if (!session) throw new AccessDenied();
       await current(env, handle, true);
-      const authz = await accountAssertion(session, env, handle);
+      authz ??= await accountAssertion(session, env, handle);
       if (authz.state.status !== 'verified') throw new AccessDenied();
       await browser(env, { operation: 'touch', handle });
       if (request.method === 'GET') {
@@ -157,15 +208,16 @@ export function createAccountConsent(_adapter?: LoginAdapter) {
         return response(consentPage({ client: client.clientName ?? auth.clientId, resource: env.RESOURCE, csrf: session.csrf, authorizationUrl }));
       }
       if (decision === 'deny') {
+        if (continuationRef) await browser(env, { operation: 'continuation-retire', handle: session.browserHandle, ref: continuationRef });
         const denied = new URL(auth.redirectUri); denied.searchParams.set('error', 'access_denied'); if (auth.state) denied.searchParams.set('state', auth.state);
         return response('', 303, { Location: denied.toString() });
       }
       if (decision !== 'approve') throw new AccessDenied();
-      const completed = await browser(env, { operation: 'commit-connector', handle, proof: { handle, generation: session.generation, accountEpoch: session.accountEpoch, subject: session.identity.subject, githubId: session.identity.githubId }, authorizationUrl, assertion: authz.assertion }) as { redirectTo: string };
+      const completed = await browser(env, { operation: 'commit-connector', handle, proof: { handle, generation: session.generation, accountEpoch: session.accountEpoch, subject: session.identity.subject, githubId: session.identity.githubId }, ...(continuationRef ? { continuationRef } : { authorizationUrl }), assertion: authz.assertion }) as { redirectTo: string };
       const redirect = new URL(completed.redirectTo), allowed = new URL(auth.redirectUri);
       if (redirect.origin !== allowed.origin || redirect.pathname !== allowed.pathname) throw new AccessDenied();
-      return response('', 303, { Location: redirect.toString() });
-    } catch { return response('<!doctype html><html lang="en"><title>Consent unavailable</title><main><h1>Connection outcome unavailable</h1><p>An interrupted response does not prove a pending connection was rolled back. Verify your account before retrying. Existing connector access is separate from local browser sign-out.</p><a href="/account">Check account</a><p><a href="/account/signin">Verify with GitHub again</a></p><p><a href="/account/public">Continue with public access</a></p></main></html>', 403); }
+      return response('', 303, { Location: redirect.toString(), ...(continuationRef ? { 'Set-Cookie': setCookie('__Host-account_continuation', '', 0) } : {}) });
+    } catch { if (continuationCookie(request)) return continuationUnavailable(403); return response('<!doctype html><html lang="en"><title>Consent unavailable</title><main><h1>Connection outcome unavailable</h1><p>An interrupted response does not prove a pending connection was rolled back. Verify your account before retrying. Existing connector access is separate from local browser sign-out.</p><a href="/account">Check account</a><p><a href="/account/signin">Verify with GitHub again</a></p><p><a href="/account/public">Continue with public access</a></p></main></html>', 403); }
   };
 }
 export const accountConsent = createAccountConsent();
