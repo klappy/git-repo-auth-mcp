@@ -50,6 +50,9 @@ jobs:
       - name: Unit tests
         run: npm test
 
+      - name: Local native account host persistence
+        run: npm run test:account-host
+
       - name: Validate native account bundle
         run: npx wrangler deploy --dry-run --config account/wrangler.jsonc --outdir /tmp/native-account-bundle
 
