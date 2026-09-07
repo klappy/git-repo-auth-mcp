@@ -81,6 +81,35 @@ it('exact Cancel invalidates consumed proof, preserves active session, and mode 
   }
 });
 
+it('vacant leftover cookies stay unbound; a live successor still denies and is never cleared', async () => {
+  const { storage, store } = setup();
+  expect(await store.vacantContinuation(browser)).toEqual({ vacant: true });
+  const first = await store.createContinuation(browser, intent);
+  expect(await store.vacantContinuation(browser)).toEqual({ vacant: false });
+  const next = await store.createContinuation(browser, { ...intent, state: 'next' });
+  await expect(store.loadContinuation(browser, first.ref)).rejects.toThrow();
+  expect(await store.vacantContinuation(browser)).toEqual({ vacant: false });
+  await store.retireContinuation(browser, next.ref);
+  expect(await store.vacantContinuation(browser)).toEqual({ vacant: true });
+  for (const value of [null, '', 0]) { const { storage, store } = setup(); await store.createContinuation(browser, intent); storage.data.set([...storage.data.keys()].find(k => k.startsWith('continuation:'))!, value); await expect(store.vacantContinuation(browser)).rejects.toThrow(); }
+  const active = await issue(store, stale, true), session = await store.load(active.handle);
+  const env = { PRIVATE_ACTIVATION: 'owner-verified', ACCOUNT_ISSUER: 'https://account.example.test', BROWSER_SESSION_KEY_HEX: 'ab'.repeat(32) };
+  const object = new AccountBrowserSessions({ storage } as unknown as DurableObjectState, env);
+  const ops: string[] = [];
+  const routedEnv = { ...env, ACCOUNT_BROWSER_SESSIONS: { idFromName: (s: string) => s, get: () => ({ fetch: async (url: string, init: RequestInit) => { const r = await object.fetch(new Request(url, init)); ops.push(((JSON.parse(String(init?.body)) as { operation?: string }).operation ?? '')); return r; } }) } };
+  const route = createAccountRoutes(), broker = async () => { throw new Error('No broker call expected'); };
+  const cookies = '__Host-account_browser=' + browser + '; __Host-account_session=' + active.handle + '; __Host-account_continuation=' + stale;
+  const signin = await route(new Request(env.ACCOUNT_ISSUER + '/account/signin', { headers: { Cookie: cookies } }), routedEnv as never, broker);
+  expect(signin?.status).toBe(200); expect(await signin!.text()).not.toContain('name="continuation"'); expect(signin?.headers.get('Set-Cookie')).not.toContain('__Host-account_continuation');
+  ops.length = 0;
+  const connect = await route(new Request(env.ACCOUNT_ISSUER + '/account/repositories/connect', { method: 'POST', headers: { Origin: env.ACCOUNT_ISSUER, Cookie: cookies }, body: new URLSearchParams({ csrf: session.csrf }).toString() }), routedEnv as never, broker);
+  expect(connect?.status).toBe(503); expect(ops).toContain('csrf'); expect(connect?.headers.get('Set-Cookie')).toBeNull();
+  const replacement = await store.createContinuation(browser, intent, active.handle);
+  const denied = await route(new Request(env.ACCOUNT_ISSUER + '/account/signin', { headers: { Cookie: cookies } }), routedEnv as never, broker);
+  expect(denied?.status).toBe(503); expect(denied?.headers.get('Set-Cookie')).toBeNull();
+  expect((await store.loadContinuation(browser, replacement.ref, active.handle)).intent?.state).toBe('original');
+});
+
 it('real routes deny transient storage failure and a delayed old success never clears the newer continuation cookie', async () => {
   const { storage, store } = setup();
   const env = { PRIVATE_ACTIVATION: 'owner-verified', ACCOUNT_ISSUER: 'https://account.example.test', BROWSER_SESSION_KEY_HEX: 'ab'.repeat(32) };
@@ -136,7 +165,7 @@ it('native rendered standalone login covers missing, retired, expired and spent 
         else { const c = await op({ operation: 'continuation-create', handle, activeHandle: active.handle, intent: { ...intent, resource: h.env.RESOURCE } }); jar.set('__Host-account_continuation', c.ref); if (kind.startsWith('aba')) await op({ operation: 'continuation-retire', handle, ref: c.ref }); else await op({ operation: 'begin', handle, activeHandle: active.handle, continuationRef: c.ref }); }
         const snapshot = await op({ operation: '__snapshot' }); release(); expect((await callback).status).toBe(503); expect(jar.get('__Host-account_session')).toBe(active.handle); expect(await op({ operation: '__snapshot' })).toEqual(snapshot);
       }
-      else { const result = await callback; expect(result.status).toBe(303); expect(result.headers.get('Location')).toBe('/account'); expect(jar.get('__Host-account_continuation')).toBe(ref); }
+      else { const result = await callback; expect(result.status).toBe(303); expect(result.headers.get('Location')).toBe('/account'); expect(jar.get('__Host-account_continuation')).toBe(ref); expect((await send('/account/signin')).status).toBe(200); }
     }
     for (const value of [null, '', 0]) {
       jar.clear(); const handle = crypto.randomUUID().replaceAll('-', '').repeat(2); jar.set('__Host-account_browser', handle);

@@ -78,6 +78,15 @@ export class BrowserSessions {
       return c; // Binding-only data, never a public response or a session issuance seam.
     });
   }
+  async vacantContinuation(browserHandle: string) {
+    handleShape(browserHandle);
+    return this.storage.transaction(async tx => {
+      const raw = await tx.get<string>('continuation:v2:' + await hash(browserHandle));
+      if (raw === undefined) return { vacant: true };
+      if (typeof raw !== 'string' || !raw) throw new AccessDenied();
+      return { vacant: false };
+    });
+  }
   async stageContinuation(handle: string, ref: string, next: 'awaiting_repository' | 'ready_for_connector') {
     handleShape(ref); return this.storage.transaction(async tx => {
       const s = (await this.valid(tx, handle)).session, c = await this.continuation(tx, s.browser, await hash(ref));
@@ -165,7 +174,8 @@ export class BrowserSessions {
       if (p.unbound) { const ledger = await tx.get<Ledger>('browser:v2:' + p.browser); if (!ledger || ledger.pendingNonce !== nonce) throw new AccessDenied(); await this.checkRestart(tx, p.browser, p.unbound, ledger); }
       await tx.delete(key);
       if (p.version !== 2 || p.expiresAt <= Date.now() || !p.transaction || p.transaction.state !== state || (await tx.get<Ledger>('browser:v2:' + p.browser))?.generation !== p.generation) return undefined;
-      if (p.continuationHash) { if (!continuationRef || await hash(continuationRef) !== p.continuationHash) return undefined; try { await this.continuation(tx, p.browser, p.continuationHash); } catch { return undefined; } } else if (continuationRef && !p.restart) return undefined;
+      if (p.continuationHash) { if (!continuationRef || await hash(continuationRef) !== p.continuationHash) return undefined; try { await this.continuation(tx, p.browser, p.continuationHash); } catch { return undefined; } }
+      else if (continuationRef && !p.restart) { const raw = await tx.get<string>('continuation:v2:' + p.browser); if (raw !== undefined) { if (typeof raw !== 'string' || !raw) throw new AccessDenied(); return undefined; } }
       const proof = opaque(); const transaction = p.transaction; delete p.transaction;
       await tx.delete(key); await tx.put('activation:v2:' + await hash(proof), await this.seal(p));
       return { transaction, proof, continuation: Boolean(p.continuationHash), standalone: Boolean(p.restart) };
@@ -276,6 +286,7 @@ export class AccountBrowserSessions implements DurableObject {
       }
       if (b.operation === 'continuation-create') { if (b.intent.resource !== (this.env as BrowserEnv & AccountEnv).RESOURCE) throw new AccessDenied(); return Response.json(await store.createContinuation(b.handle, b.intent, b.activeHandle)); }
       if (b.operation === 'continuation-load') return Response.json(await store.loadContinuation(b.handle, b.ref, b.activeHandle));
+      if (b.operation === 'continuation-vacant') return Response.json(await store.vacantContinuation(b.handle));
       if (b.operation === 'continuation-stage') return Response.json(await store.stageContinuation(b.handle, b.ref, b.next));
       if (b.operation === 'continuation-retire') return Response.json(await store.retireContinuation(b.handle, b.ref));
       if (b.operation === 'continuation-cancel') return Response.json(await store.cancelContinuation(b.handle, b.ref, b.nonce, b.activeHandle));

@@ -21,6 +21,8 @@ const continuationCookie = (request: Request) => cookie(request, '__Host-account
 function single(form: URLSearchParams, key: string) { if (form.getAll(key).length > 1) throw new AccessDenied(); return form.get(key) ?? ''; }
 function intentUrl(intent: ContinuationIntent, env: AccountBrowserEnv) { const url = new URL('/authorize', env.ACCOUNT_ISSUER); url.search = new URLSearchParams({ client_id: intent.clientId, redirect_uri: intent.redirectUri, state: intent.state, response_type: intent.responseType, scope: intent.scope.join(' '), resource: intent.resource, code_challenge: intent.codeChallenge, code_challenge_method: intent.codeChallengeMethod }).toString(); return url.toString(); }
 async function continuation(env: AccountBrowserEnv, browserHandle: string, ref: string, activeHandle?: string) { return browser(env, { operation: 'continuation-load', handle: browserHandle, ref, activeHandle }) as Promise<{ intent: ContinuationIntent; expiresAt: number; stage: string }>; }
+async function vacantContinuation(env: AccountBrowserEnv, browserHandle: string) { return (await browser(env, { operation: 'continuation-vacant', handle: browserHandle }) as { vacant: boolean }).vacant === true; }
+async function liveContinuation(env: AccountBrowserEnv, browserHandle: string, ref?: string, activeHandle?: string) { if (!ref) return; try { await continuation(env, browserHandle, ref, activeHandle); return ref; } catch { if (!await vacantContinuation(env, browserHandle)) throw new AccessDenied(); } }
 async function providerHelpers(env: AccountBrowserEnv) { if (!env.ACCOUNT_CONNECTOR_KV) throw new AccessDenied(); const { getOAuthApi } = await import('@cloudflare/workers-oauth-provider'); return getOAuthApi({ apiRoute: env.RESOURCE, apiHandler: { fetch: () => new Response('', { status: 403 }) }, defaultHandler: { fetch: () => new Response('', { status: 403 }) }, authorizeEndpoint: env.ACCOUNT_ISSUER + '/authorize', tokenEndpoint: env.ACCOUNT_ISSUER + '/token', resourceMatchOriginOnly: false }, { ...env, OAUTH_KV: env.ACCOUNT_CONNECTOR_KV }); }
 export async function accountAssertion(session: BrowserSession, env: AccountBrowserEnv, handle: string) {
   await browser(env, { operation: 'verify', identity: session.identity });
@@ -66,7 +68,7 @@ export function createAccountRoutes(adapter?: LoginAdapter) {
         if (activeHandle) { try { active = await current(env, activeHandle); } catch { activeHandle = ''; } }
         const handle = active ? active.browserHandle : cookie(request, '__Host-account_browser') || opaque();
         if (!/^[a-f0-9]{64}$/.test(handle)) throw new AccessDenied();
-        const continuationRef = continuationCookie(request);
+        const continuationRef = await liveContinuation(env, handle, continuationCookie(request), activeHandle || undefined);
         const pending = await browser(env, { operation: 'begin', handle, activeHandle: activeHandle || undefined, continuationRef }) as { nonce: string };
         return response(accountPage({ loginCsrf: pending.nonce, continuationRef }), 200, { 'Set-Cookie': setCookie('__Host-account_browser', handle, 300) });
       }
@@ -97,7 +99,7 @@ export function createAccountRoutes(adapter?: LoginAdapter) {
         if (env.PRIVATE_ACTIVATION !== 'owner-verified' || request.headers.get('Origin') !== new URL(env.ACCOUNT_ISSUER).origin) throw new AccessDenied();
         const handle = cookie(request, '__Host-account_browser'), text = await request.text(); if (text.length > 4096) throw new AccessDenied(); const form = new URLSearchParams(text), nonce = single(form, 'csrf'), continuationRef = single(form, 'continuation') || undefined;
         const mode = single(form, 'restart'); if (mode && mode !== 'standalone') throw new AccessDenied(); const restart = mode === 'standalone';
-        if (!restart && continuationRef !== continuationCookie(request)) throw new AccessDenied();
+        if (!restart && continuationRef !== await liveContinuation(env, handle, continuationCookie(request))) throw new AccessDenied();
         const start = await login(adapter, env).begin();
         await browser(env, { operation: 'start', handle, nonce, transaction: start.transaction, continuationRef, restart });
         const target = new URL(start.url); if (target.origin !== 'https://github.com' || target.pathname !== '/login/oauth/authorize') throw new AccessDenied();
@@ -124,7 +126,7 @@ export function createAccountRoutes(adapter?: LoginAdapter) {
         if (request.headers.get('Origin') !== new URL(env.ACCOUNT_ISSUER).origin || Number(request.headers.get('content-length') ?? 0) > 4096) throw new AccessDenied();
         const text = await request.text(); if (text.length > 4096) throw new AccessDenied();
         const form = new URLSearchParams(text), csrf = single(form, 'csrf'); formContinuation = single(form, 'continuation') || undefined;
-        if (path === '/account/repositories/connect' && formContinuation !== continuationCookie(request)) throw new AccessDenied();
+        if (path === '/account/repositories/connect' && formContinuation !== await liveContinuation(env, session.browserHandle, continuationCookie(request), handle)) throw new AccessDenied();
         if (formContinuation) await continuation(env, session.browserHandle, formContinuation, handle);
         await browser(env, { operation: 'csrf', handle, nonce: csrf });
       }
@@ -140,7 +142,7 @@ export function createAccountRoutes(adapter?: LoginAdapter) {
       }
       if (repositoryCallback) {
         if (request.method !== 'GET' || url.origin + path !== env.GITHUB_CALLBACK) throw new AccessDenied();
-        const continuationRef = continuationCookie(request);
+        const continuationRef = await liveContinuation(env, session.browserHandle, continuationCookie(request), handle);
         await browser(env, { operation: 'repository-state', handle, nonce: single(url.searchParams, 'state'), consume: true, continuationRef });
         const proof = { handle, generation: session.generation, accountEpoch: session.accountEpoch, subject: session.identity.subject, githubId: session.identity.githubId };
         const result = await broker(new Request(url, { headers: { Authorization: 'Bearer ' + auth.assertion, 'X-Account-Browser-Proof': JSON.stringify(proof) } }));
