@@ -1,3 +1,4 @@
+import { stagingRegistration, registrationEnabled } from './staging-registration';
 import { accountRoutes, accountConsent } from './account-routes';
 export { AccountBrowserSessions } from './browser-session';
 export { AccountIdentityRegistry } from './identity-registry';
@@ -39,6 +40,7 @@ export class AccountBroker {
 }
 export interface AccountEnv {
   STAGING_METADATA_DISCOVERY?: string;
+  STAGING_CLIENT_REGISTRATION?: string;
   ACCOUNT_IDENTITY_REGISTRY?: DurableObjectNamespace;
   ACCOUNT_BROWSER_SESSIONS?: DurableObjectNamespace;
   PRIVATE_ACTIVATION: string; ACCOUNT_GRANTS: DurableObjectNamespace;
@@ -199,16 +201,20 @@ export async function connectorSession(request: Request, env: AccountEnv, props:
 export default {
   async fetch(request: Request, env: AccountEnv, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
+    const registration = await stagingRegistration(request, env, ctx);
+    if (registration) return registration;
     if (env.PRIVATE_ACTIVATION === 'disabled' && env.STAGING_METADATA_DISCOVERY === 'enabled' &&
       ['/.well-known/oauth-authorization-server', '/.well-known/oauth-protected-resource'].includes(url.pathname)) {
       if (request.method !== 'GET' || url.origin !== env.ACCOUNT_ISSUER || url.href.split('#')[0].includes('?')) return errorResponse(new AccessDenied());
       const { OAuthProvider } = await import('@cloudflare/workers-oauth-provider');
       const deny = { fetch: async () => errorResponse(new AccessDenied()) };
       // The maintained metadata branch precedes all environment/KV access.
-      // This provider has no registration endpoint and cannot authorize a user.
+      // Metadata reflects the guarded staging registration route; user authorization remains denied.
       const discovery = new OAuthProvider<AccountEnv>({
         apiRoute: env.RESOURCE, apiHandler: deny, defaultHandler: deny,
         authorizeEndpoint: `${env.ACCOUNT_ISSUER}/authorize`, tokenEndpoint: `${env.ACCOUNT_ISSUER}/token`,
+        clientRegistrationEndpoint: registrationEnabled(env) ? `${env.ACCOUNT_ISSUER}/register` : undefined,
+        clientRegistrationTTL: undefined, clientIdMetadataDocumentEnabled: false,
         allowPlainPKCE: false, resourceMatchOriginOnly: false,
         resourceMetadata: { resource: env.RESOURCE, authorization_servers: [env.ACCOUNT_ISSUER] },
         scopesSupported: ['repository:read'],
@@ -231,6 +237,8 @@ export default {
         apiHandler: { fetch: (r, e, c) => connectorSession(r, e, (c as ExecutionContext & { props: unknown }).props) },
         defaultHandler: { fetch: async (r, e) => await accountConsent(r, e, e.OAUTH_PROVIDER, trusted => completeConnectorConsent(trusted, e, e.OAUTH_PROVIDER)) ?? errorResponse(new AccessDenied()) },
         authorizeEndpoint: `${env.ACCOUNT_ISSUER}/authorize`, tokenEndpoint: `${env.ACCOUNT_ISSUER}/token`,
+        clientRegistrationEndpoint: registrationEnabled(env) ? `${env.ACCOUNT_ISSUER}/register` : undefined,
+        clientRegistrationTTL: undefined, clientIdMetadataDocumentEnabled: false,
         allowPlainPKCE: false,
         resourceMatchOriginOnly: false, resourceMetadata: { resource: env.RESOURCE, authorization_servers: [env.ACCOUNT_ISSUER] }, scopesSupported: ['repository:read'],
       });
