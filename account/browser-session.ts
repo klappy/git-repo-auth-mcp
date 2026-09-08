@@ -84,7 +84,7 @@ export class BrowserSessions {
       let live = false, terminal = false;
       if (ref) { handleShape(ref); const raw = await tx.get<string>('continuation:v2:' + b.browser); if (raw !== undefined) { if (typeof raw !== 'string' || !raw) throw new AccessDenied(); const c = await this.open<Continuation>(raw); if (c.refHash !== await hash(ref)) throw new AccessDenied(); if (c.stage === 'spent' || c.expiresAt <= Date.now()) { await this.terminal(tx, b.browser, b.ledger, await hash(ref)); terminal = true; } else { const c = await this.continuation(tx, b.browser, await hash(ref)); if (c.expected && b.session && (c.expected.subject !== b.session.identity.subject || c.expectedEpoch !== b.session.accountEpoch)) throw new AccessDenied(); live = true; } } else terminal = true; }
       else { const c = await this.terminal(tx, b.browser, b.ledger, undefined, true); terminal = Boolean(c); }
-      return { kind: b.usable ? 'active' : live ? 'live' : terminal ? 'terminal' : b.session ? 'verify' : 'anonymous', browserHandle: b.browserHandle };
+      return { kind: b.usable ? 'active' : live ? 'live' : terminal ? 'terminal' : b.session ? 'verify' : 'anonymous', browserHandle: b.browserHandle, ...(live ? { live: true } : {}) };
     });
   }
   private async continuation(tx: DurableObjectTransaction, browser: string, refHash: string) {

@@ -103,6 +103,7 @@ export function createAccountRoutes(adapter?: LoginAdapter) {
         return response('', 303, { Location: target.toString(), 'Set-Cookie': setCookie('__Host-account_login', nonce, 300) });
       }
       const handle = cookie(request, '__Host-account_session');
+      let accountContinuation: string | undefined;
       if (path === '/account/continue' && request.method === 'GET') {
         const ref = continuationCookie(request); if (!ref) throw new AccessDenied();
         await continuation(env, cookie(request, '__Host-account_browser'), ref);
@@ -110,9 +111,10 @@ export function createAccountRoutes(adapter?: LoginAdapter) {
       }
       if (path === '/account' && request.method === 'GET') {
         if (!env.ACCOUNT_BROWSER_SESSIONS || env.PRIVATE_ACTIVATION !== 'owner-verified') return response(accountPage());
-        const entry = await browser(env, { operation: 'entry', handle: cookie(request, '__Host-account_browser') || (handle ? '' : opaque()), activeHandle: handle || undefined, continuationRef: continuationCookie(request) }) as { kind: string; signoutCsrf?: string };
+        const entry = await browser(env, { operation: 'entry', handle: cookie(request, '__Host-account_browser') || (handle ? '' : opaque()), activeHandle: handle || undefined, continuationRef: continuationCookie(request) }) as { kind: string; signoutCsrf?: string; live?: boolean };
         if (entry.kind === 'anonymous') return response('', 303, { Location: '/account/signin' });
         if (entry.kind !== 'active') return response(entryPage(entry.kind, entry.signoutCsrf, await repositoryStartsBlocked(env)));
+        if (entry.live) accountContinuation = continuationCookie(request);
       }
       // A valid retired-handle tombstone may still cancel a replacement that won the callback race.
       // Revoke-all is stricter: the authority DO requires a currently active session.
@@ -166,7 +168,7 @@ export function createAccountRoutes(adapter?: LoginAdapter) {
         await browser(env, { operation: 'commit-repository', handle, proof, candidateId: candidate.candidateId, assertion: auth.assertion, ...(captured.purpose === 'account' ? { lease: captured.lease } : { continuationRef }) });
         return response('', 303, { Location: captured.purpose === 'account' ? '/account' : continuationRef ? '/account/continue' : '/account' });
       }
-      if (path === '/account' && request.method === 'GET') return response(accountPage({ subject: session.identity.subject, csrf: session.csrf, connected: auth.state.status === 'verified', repositoryStartsBlocked: await repositoryStartsBlocked(env), repositoryLease: session.repositoryState?.purpose === 'account' && session.repositoryState.expiresAt > Date.now() ? session.repositoryState : undefined }), 200, { 'Set-Cookie': setCookie('__Host-account_session', handle, Math.max(0, Math.min(1800, Math.floor((session.absoluteUntil - Date.now()) / 1000)))) });
+      if (path === '/account' && request.method === 'GET') return response(accountPage({ subject: session.identity.subject, csrf: session.csrf, connected: auth.state.status === 'verified', continuationRef: accountContinuation, repositoryStartsBlocked: await repositoryStartsBlocked(env), repositoryLease: session.repositoryState?.purpose === 'account' && session.repositoryState.expiresAt > Date.now() ? session.repositoryState : undefined }), 200, { 'Set-Cookie': setCookie('__Host-account_session', handle, Math.max(0, Math.min(1800, Math.floor((session.absoluteUntil - Date.now()) / 1000)))) });
       if (request.method === 'POST' && ['/account/disconnect', '/account/repositories/connect'].includes(path)) {
         if (path.endsWith('/connect')) {
           const started = await browser(env, { operation: 'repository-start', handle, lease: accountLease ?? connectorLease, purpose: accountLease ? 'account' : 'connector', ...(accountLease ? {} : { continuationRef: formContinuation }), assertion: auth.assertion }) as { authorizationUrl: string };
