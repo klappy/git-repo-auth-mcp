@@ -19,10 +19,32 @@ const browser = 'a'.repeat(64), stale = 'b'.repeat(64), key = new Uint8Array(32)
 const intent: ContinuationIntent = { clientId: 'fixture', redirectUri: 'https://client.example.test/callback', state: 'original', responseType: 'code', codeChallenge: 'c'.repeat(43), codeChallengeMethod: 'S256', resource: 'https://navigator.example.test/mcp', scope: ['repository:read'] };
 const transaction = () => ({ kind: 'identity-bootstrap' as const, state: crypto.randomUUID(), verifier: 'INERT', callback: 'https://account.example.test/account/callback', expiresAt: Date.now() + 300000 });
 it('standalone markup has the existing responsive viewport contract', () => { expect(standalonePage(stale)).toContain('<meta name="viewport" content="width=device-width,initial-scale=1">'); });
-it('Verify preserves connector context and uses standalone only on the dashboard', () => { expect(accountPage({ subject: 'fixture', continuationRef: stale })).toContain('href="/account/signin">Verify again'); expect(accountPage({ subject: 'fixture' })).toContain('href="/account/signin?restart=standalone">Verify again'); const live = accountPage({ subject: 'fixture', liveContinuation: stale }); expect(live).toContain('href="/account/signin?restart=standalone">Verify again'); expect(live).toContain('name="purpose" value="account"'); expect(live).toContain('href="/account/continue"'); expect(live.match(/<form method="post" action="\/account\/repositories\/connect">([\s\S]*?)<\/form>/)?.[1] ?? '').not.toContain('name="continuation"'); });
+it('Verify preserves connector context and uses standalone only on the dashboard', () => { expect(accountPage({ subject: 'fixture', continuationRef: stale })).toContain('href="/account/signin">Verify again'); expect(accountPage({ subject: 'fixture' })).toContain('href="/account/signin?restart=standalone">Verify again'); const live = accountPage({ subject: 'fixture', liveContinuation: stale }); expect(live).toContain('<button disabled>Verify again with the same GitHub account</button>'); expect(live).not.toContain('href="/account/signin?restart=standalone"'); expect(live).toContain('name="purpose" value="account"'); expect(live).toContain('href="/account/continue"'); expect(live.match(/<form method="post" action="\/account\/repositories\/connect">([\s\S]*?)<\/form>/)?.[1] ?? '').not.toContain('name="continuation"'); });
 function setup() { const storage = new Storage(), store = new BrowserSessions(storage as unknown as DurableObjectStorage, key); return { storage, store }; }
 async function issue(store: BrowserSessions, ref?: string, restart = false, active?: string, id = 1001) { const p = await store.begin(browser, active, ref, restart), tx = transaction(); await store.start(browser, p.nonce, tx, ref, restart); return store.activate(id, (await store.consume(browser, p.nonce, tx.state, ref)).proof); }
 async function edit(storage: Storage, prefix: string, mutate: (s: any) => void) { const [k, raw] = [...storage.data].find(([k]) => k.startsWith(prefix))!; const d = await compactDecrypt(raw as string, key), s = JSON.parse(new TextDecoder().decode(d.plaintext)); mutate(s); storage.data.set(k, await new CompactEncrypt(new TextEncoder().encode(JSON.stringify(s))).setProtectedHeader(d.protectedHeader).encrypt(key)); }
+it('pending dashboard controls preserve the original request and identity until explicit cancellation', async () => {
+  const { storage, store } = setup(), active = await issue(store);
+  const request = await store.createContinuation(browser, intent, active.handle);
+  await store.begin(browser, active.handle, request.ref);
+  const session = await store.load(active.handle), before = structuredClone(storage.data);
+  const entry = await store.entry(browser, active.handle, request.ref);
+  expect(entry).toMatchObject({ kind: 'active', live: true });
+  const html = accountPage({ subject: session.identity.subject, csrf: session.csrf, liveContinuation: request.ref });
+  const connect = html.match(/<form method="post" action="\/account\/repositories\/connect">([\s\S]*?)<\/form>/)![1];
+  expect(connect).toContain('name="purpose" value="account"'); expect(connect).not.toContain('name="continuation"'); expect(connect).toContain('<button disabled>Connect repository access</button>');
+  expect(html).toContain('<button disabled>Verify again with the same GitHub account</button>'); expect(html).not.toContain('href="/account/signin?restart=standalone"');
+  expect(html).toContain('Choose Continue this connection or Cancel connection'); expect(html).toContain('href="/account/continue"');
+  const cancel = html.match(/<form method="post" action="\/account\/continuation\/cancel">([\s\S]*?)<\/form>/)![1];
+  expect(cancel).toContain(`name="continuation" value="${request.ref}"`); expect(cancel).toContain(`<button>Cancel connection</button>`);
+  await expect(store.prepareAccountRepository(active.handle, session.csrf)).rejects.toThrow();
+  await expect(store.begin(browser, active.handle, undefined, true)).rejects.toThrow();
+  expect(storage.data).toEqual(before);
+  await store.cancelContinuation(browser, request.ref, session.csrf, active.handle);
+  const current = await store.load(active.handle); expect(current.identity).toEqual(session.identity);
+  const after = accountPage({ subject: current.identity.subject, csrf: current.csrf });
+  expect(after).toContain('<button>Connect repository access</button>'); expect(after).toContain('href="/account/signin?restart=standalone"');
+});
 it('account repository lease blocks every identity entrypoint and cross-purpose writer before mutation', async () => {
   const { storage, store } = setup(), active = await issue(store), lease = await store.prepareAccountRepository(active.handle, active.csrf, stale), snapshot = structuredClone(storage.data);
   for (const mode of ['ordinary', 'standalone', 'connector']) { await expect(store.begin(browser, undefined, mode === 'connector' ? stale : undefined, mode === 'standalone')).rejects.toThrow(); expect(storage.data).toEqual(snapshot); }
