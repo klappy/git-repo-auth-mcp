@@ -19,9 +19,9 @@
     "GITHUB_CALLBACK": "https://account-staging.klappy.dev/oauth/callback",
     "ACCOUNT_LOGIN_CALLBACK": "https://account-staging.klappy.dev/account/callback"
   },
-  // Assign the actual native-account-connector-staging-v15 namespace ID
-  // after creation/readback. Never deploy with automatic provisioning.
-  "kv_namespaces": [{ "binding": "ACCOUNT_CONNECTOR_KV", "remote": false }],
+  // Root allocated/read back native-account-connector-staging-v15.
+  // Never deploy with automatic provisioning.
+  "kv_namespaces": [{ "binding": "ACCOUNT_CONNECTOR_KV", "remote": false, "id": "f1175de951844fbd80942d82c8416903" }],
   "durable_objects": {
     "bindings": [
       { "name": "ACCOUNT_GRANTS", "class_name": "AccountGrantObject" },

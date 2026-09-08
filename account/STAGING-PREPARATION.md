@@ -1,5 +1,11 @@
 # Disabled account staging preparation
 
+## Current allocation update
+
+Root subsequently allocated and read back `native-account-connector-staging-v15`, ID `f1175de951844fbd80942d82c8416903`. The current configuration contains this exact32-character ID; its SHA256 is `5e8cc5fcf5c2dfdd7754549cf229f61728ab26f1e373af36f88eabbb14361230`. The ID-unassigned description below records the initial preparation state. This allocation closes that specific missing-ID prerequisite, not project wiring, token authority, logging, live deployment or activation proof. Account has a documented connected-build command, not an executable account predeploy guard; root must hold the trigger until the exact ID-bearing configuration and project settings are verified.
+
+Existing opaque build-token policy lookup returned9109 Unauthorized. That route is stopped. Protected operator verification of existing target authority or protected narrow-token provisioning is required, without demanding a new token based only on its name. No token value belongs in chat, source or model-visible output. Root retains all control-plane mutations.
+
 Base: PR66 c70d0cb1374b8ceef28bfff5bc7989080d16f88f. The configuration-only partial below is historical; the final source includes the discovery amendment described below.
 
 `wrangler.staging.jsonc` selects account/broker.ts and the approved isolated Worker name, origins and three SQLite classes. It disables private activation, workers.dev, preview URLs, routes and source observability. ACCOUNT_CONNECTOR_KV is declared without a made-up ID. Installed Wrangler 4.99.0 accepts a binding-only namespace for dry build. This is NOT deployment-ready: obtain the actual namespace named native-account-connector-staging-v15 and insert its verified ID before the connected Workers Builds deployment. Do not permit implicit namespace auto-provisioning or invoke the legacy root deploy script. No account ID is needed for the local bundle; the connected project must explicitly select the approved account.
