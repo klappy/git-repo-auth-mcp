@@ -4,7 +4,7 @@ import { AccessDenied } from './session';
 import { productionLogin, type LoginAdapter } from './login';
 import type { IdentityTransaction } from './oauth';
 import { opaque, type BrowserSession, type ContinuationIntent } from './browser-session';
-import { accountPage, standalonePage, entryPage, browserHeaders } from './account-ui';
+import { accountPage, standalonePage, entryPage, browserHeaders, accountDocument, publicExplorerUrl, escape } from './account-ui';
 export interface AccountBrowserEnv extends AccountEnv { ACCOUNT_BROWSER_SESSIONS?: DurableObjectNamespace; ACCOUNT_IDENTITY_REGISTRY?: DurableObjectNamespace; ACCOUNT_LOGIN_CALLBACK?: string; }
 const cookie = (request: Request, name: string) => request.headers.get('Cookie')?.split(';').map(s => s.trim()).find(s => s.startsWith(name + '='))?.slice(name.length + 1) ?? '';
 const setCookie = (name: string, value: string, age = 1800) => `${name}=${value}; Secure; HttpOnly; SameSite=Lax; Path=/; Max-Age=${age}`;
@@ -17,7 +17,7 @@ async function internal(namespace: DurableObjectNamespace | undefined, name: str
 }
 async function browser(env: AccountBrowserEnv, value: unknown) { return internal(env.ACCOUNT_BROWSER_SESSIONS, 'account-authority-v2', value); }
 async function repositoryStartsBlocked(env: AccountBrowserEnv) { try { const status = await browser(env, { operation: 'repository-start-status' }) as { blocked: boolean }; return status.blocked !== false; } catch { return true; } }
-function repositoryStartUnavailable() { return response('<!doctype html><html lang="en"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Repository connections unavailable</title><main><h1>New repository connections are temporarily unavailable pending verified recovery.</h1><p>Existing access is separate. Canceling a local action does not unblock new connections or prove an interrupted write was rolled back.</p><a href="/account">Check account</a><p><a href="/account/public">Continue with public access</a></p></main></html>', 503); }
+function repositoryStartUnavailable() { return response(accountDocument('Repository connections unavailable', '<h1>New repository connections are temporarily unavailable.</h1><p>A connection may have completed even if this page did not load. Check your account before starting again. Existing access is separate; canceling does not confirm that a connection failed.</p><a href="/account">Check account</a><p><a href="/account/public">Continue with public access</a></p>'), 503); }
 async function current(env: AccountBrowserEnv, handle: string, fresh = false): Promise<BrowserSession> { const s = await browser(env, { operation: 'load', handle }) as BrowserSession; if (s.version !== 2 || (fresh && Date.now() - s.verifiedAt > 300_000)) throw new AccessDenied(); return s; }
 const continuationCookie = (request: Request) => cookie(request, '__Host-account_continuation') || undefined;
 function single(form: URLSearchParams, key: string) { if (form.getAll(key).length > 1) throw new AccessDenied(); return form.get(key) ?? ''; }
@@ -46,7 +46,7 @@ export function createAccountRoutes(adapter?: LoginAdapter) {
     if (!path.startsWith('/account') && !repositoryCallback) return null;
     let activationProof: string | undefined;
     try {
-      if (path === '/account/public' && request.method === 'GET') return response('<!doctype html><html lang="en"><title>Public access</title><main><h1>Public access remains available</h1><p>Cartographer’s public explorer can be opened without this account sign-in. Private repositories require separate authorized access.</p><a href="https://cartographer.klappy.dev/explore.html">Open Cartographer public explorer</a><p><a href="/account">Account access</a></p></main></html>');
+      if (path === '/account/public' && request.method === 'GET') return response(accountDocument('Public access', '<h1>Public access remains available</h1><p>Cartographer’s public explorer can be opened without this account sign-in. Private repositories require separate authorized access.</p><a href="' + escape(publicExplorerUrl(env.RESOURCE)) + '">Open Cartographer public explorer</a><p><a href="/account">Account access</a></p>'));
       if (path === '/account/continuation/cancel' && request.method === 'POST') {
         if (request.headers.get('Origin') !== new URL(env.ACCOUNT_ISSUER).origin) throw new AccessDenied();
         const text = await request.text(); if (text.length > 4096) throw new AccessDenied(); const form = new URLSearchParams(text), ref = single(form, 'continuation');
@@ -179,7 +179,7 @@ export function createAccountRoutes(adapter?: LoginAdapter) {
         await current(env, handle); return response('', 303, { Location: '/account' });
       }
       throw new AccessDenied();
-    } catch { if (['/account/repositories/connect', '/account/repositories/cancel', '/account/continuation/cancel', '/account'].includes(path) && await repositoryStartsBlocked(env)) return repositoryStartUnavailable(); if (activationProof) { try { await browser(env, { operation: 'discard', proof: activationProof }); } catch { /* Failed cleanup is still a denied callback; proof remains bounded and token-free. */ } } if (path === '/account' || path === '/account/signin') return response(entryPage(), 503); if (continuationCookie(request)) return continuationUnavailable(503); return response('<!doctype html><html lang="en"><title>Account unavailable</title><main><h1>Account request could not be confirmed</h1><p>If a connection was in progress, check your account before retrying: an interrupted response does not prove the connection was rolled back. Sign in again to recover the same GitHub identity. To switch accounts, sign out first. Public access remains available.</p><a href="/account">Check account</a><p><a href="/account/signin">Sign in again</a></p><p><a href="/account/public">Continue with public access</a></p></main></html>', 503); }
+    } catch { if (['/account/repositories/connect', '/account/repositories/cancel', '/account/continuation/cancel', '/account'].includes(path) && await repositoryStartsBlocked(env)) return repositoryStartUnavailable(); if (activationProof) { try { await browser(env, { operation: 'discard', proof: activationProof }); } catch { /* Failed cleanup is still a denied callback; proof remains bounded and token-free. */ } } if (path === '/account' || path === '/account/signin') return response(entryPage(), 503); if (continuationCookie(request)) return continuationUnavailable(503); return response(accountDocument('Account unavailable', '<h1>Account request could not be confirmed</h1><p>If a connection was in progress, it may have completed even if this page did not load. Check your account before starting again. Sign in again to recover the same GitHub identity. To switch accounts, sign out first. Public access remains available.</p><a href="/account">Check account</a><p><a href="/account/signin">Sign in again</a></p><p><a href="/account/public">Continue with public access</a></p>'), 503); }
   };
 }
 function login(adapter: LoginAdapter | undefined, env: AccountBrowserEnv): LoginAdapter {
@@ -246,7 +246,7 @@ export function createAccountConsent(_adapter?: LoginAdapter) {
       const redirect = new URL(completed.redirectTo), allowed = new URL(auth.redirectUri);
       if (redirect.origin !== allowed.origin || redirect.pathname !== allowed.pathname) throw new AccessDenied();
       return response('', 303, { Location: redirect.toString(), ...(continuationRef ? { 'Set-Cookie': setCookie('__Host-account_continuation', '', 0) } : {}) });
-    } catch { if (continuationCookie(request)) return continuationUnavailable(403); return response('<!doctype html><html lang="en"><title>Consent unavailable</title><main><h1>Connection outcome unavailable</h1><p>An interrupted response does not prove a pending connection was rolled back. Verify your account before retrying. Existing connector access is separate from local browser sign-out.</p><a href="/account">Check account</a><p><a href="/account/signin">Verify with GitHub again</a></p><p><a href="/account/public">Continue with public access</a></p></main></html>', 403); }
+    } catch { if (continuationCookie(request)) return continuationUnavailable(403); return response(accountDocument('Consent unavailable', '<h1>Connection outcome unavailable</h1><p>The connection may have completed even if this page did not load. Check your account before starting again. Signing out of this browser does not end existing connector access.</p><a href="/account">Check account</a><p><a href="/account/signin">Verify with GitHub again</a></p><p><a href="/account/public">Continue with public access</a></p>'), 403); }
   };
 }
 export const accountConsent = createAccountConsent();
