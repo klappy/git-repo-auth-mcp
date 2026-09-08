@@ -6,7 +6,7 @@
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": false,
   "preview_urls": false,
-  "routes": [{ "pattern": "account-staging.klappy.dev", "custom_domain": true, "zone_id": "d3fb39dede08497b44146266cc7c6d4e" }],
+  "routes": [{ "pattern": "account-staging.klappy.dev", "custom_domain": true }],
   "observability": { "enabled": false },
   "vars": {
     "GITHUB_CLIENT_ID": "Ov23li2Uh9UpIBa5Ezn6",
