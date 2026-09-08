@@ -1,0 +1,36 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "native-account-broker-staging-v15",
+  "main": "broker.ts",
+  "compatibility_date": "2026-09-07",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [],
+  "observability": { "enabled": false },
+  "vars": {
+    "PRIVATE_ACTIVATION": "disabled",
+    "STAGING_METADATA_DISCOVERY": "enabled",
+    "ACCOUNT_ISSUER": "https://account-staging.klappy.dev",
+    "SERVICE_ISSUER": "https://cartographer-staging.klappy.dev",
+    "BROKER_AUDIENCE": "https://account-staging.klappy.dev/read",
+    "RESOURCE": "https://cartographer-staging.klappy.dev/mcp",
+    "SERVICE": "cartographer",
+    "GITHUB_CALLBACK": "https://account-staging.klappy.dev/oauth/callback",
+    "ACCOUNT_LOGIN_CALLBACK": "https://account-staging.klappy.dev/account/callback"
+  },
+  // Assign the actual native-account-connector-staging-v15 namespace ID
+  // after creation/readback. Never deploy with automatic provisioning.
+  "kv_namespaces": [{ "binding": "ACCOUNT_CONNECTOR_KV", "remote": false }],
+  "durable_objects": {
+    "bindings": [
+      { "name": "ACCOUNT_GRANTS", "class_name": "AccountGrantObject" },
+      { "name": "ACCOUNT_BROWSER_SESSIONS", "class_name": "AccountBrowserSessions" },
+      { "name": "ACCOUNT_IDENTITY_REGISTRY", "class_name": "AccountIdentityRegistry" }
+    ]
+  },
+  "migrations": [
+    { "tag": "account-v1", "new_sqlite_classes": ["AccountGrantObject"] },
+    { "tag": "account-browser-v1", "new_sqlite_classes": ["AccountBrowserSessions", "AccountIdentityRegistry"] }
+  ]
+}

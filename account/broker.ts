@@ -38,6 +38,7 @@ export class AccountBroker {
   }
 }
 export interface AccountEnv {
+  STAGING_METADATA_DISCOVERY?: string;
   ACCOUNT_IDENTITY_REGISTRY?: DurableObjectNamespace;
   ACCOUNT_BROWSER_SESSIONS?: DurableObjectNamespace;
   PRIVATE_ACTIVATION: string; ACCOUNT_GRANTS: DurableObjectNamespace;
@@ -163,7 +164,7 @@ export async function createConnectorProvider<Env>(options: {
   authorizationHandler: import('@cloudflare/workers-oauth-provider').OAuthProviderOptions<Env>['defaultHandler'];
 }) {
   const { OAuthProvider } = await import('@cloudflare/workers-oauth-provider');
-  return new OAuthProvider<Env>({ apiRoute: new URL(options.resource).pathname, apiHandler: options.apiHandler, defaultHandler: options.authorizationHandler, authorizeEndpoint: `${options.issuer}/authorize`, tokenEndpoint: `${options.issuer}/token`, resourceMatchOriginOnly: false, resourceMetadata: { resource: options.resource, authorization_servers: [options.issuer] }, scopesSupported: ['repository:read'] });
+  return new OAuthProvider<Env>({ apiRoute: new URL(options.resource).pathname, apiHandler: options.apiHandler, defaultHandler: options.authorizationHandler, authorizeEndpoint: `${options.issuer}/authorize`, tokenEndpoint: `${options.issuer}/token`, allowPlainPKCE: false, resourceMatchOriginOnly: false, resourceMetadata: { resource: options.resource, authorization_servers: [options.issuer] }, scopesSupported: ['repository:read'] });
 }
 
 
@@ -197,6 +198,25 @@ export async function connectorSession(request: Request, env: AccountEnv, props:
 }
 export default {
   async fetch(request: Request, env: AccountEnv, ctx: ExecutionContext): Promise<Response> {
+    const url = new URL(request.url);
+    if (env.PRIVATE_ACTIVATION === 'disabled' && env.STAGING_METADATA_DISCOVERY === 'enabled' &&
+      ['/.well-known/oauth-authorization-server', '/.well-known/oauth-protected-resource'].includes(url.pathname)) {
+      if (request.method !== 'GET' || url.origin !== env.ACCOUNT_ISSUER || url.href.split('#')[0].includes('?')) return errorResponse(new AccessDenied());
+      const { OAuthProvider } = await import('@cloudflare/workers-oauth-provider');
+      const deny = { fetch: async () => errorResponse(new AccessDenied()) };
+      // The maintained metadata branch precedes all environment/KV access.
+      // This provider has no registration endpoint and cannot authorize a user.
+      const discovery = new OAuthProvider<AccountEnv>({
+        apiRoute: env.RESOURCE, apiHandler: deny, defaultHandler: deny,
+        authorizeEndpoint: `${env.ACCOUNT_ISSUER}/authorize`, tokenEndpoint: `${env.ACCOUNT_ISSUER}/token`,
+        allowPlainPKCE: false, resourceMatchOriginOnly: false,
+        resourceMetadata: { resource: env.RESOURCE, authorization_servers: [env.ACCOUNT_ISSUER] },
+        scopesSupported: ['repository:read'],
+      });
+      const response = await discovery.fetch(request, env, ctx);
+      response.headers.set('Cache-Control', 'no-store');
+      return response;
+    }
     const account = await accountRoutes(request, env, r => accountWorker.fetch(r, env));
     if (account) return account;
     // Repository authorization is reachable only through the CSRF/fresh-browser wrapper above.
@@ -211,6 +231,7 @@ export default {
         apiHandler: { fetch: (r, e, c) => connectorSession(r, e, (c as ExecutionContext & { props: unknown }).props) },
         defaultHandler: { fetch: async (r, e) => await accountConsent(r, e, e.OAUTH_PROVIDER, trusted => completeConnectorConsent(trusted, e, e.OAUTH_PROVIDER)) ?? errorResponse(new AccessDenied()) },
         authorizeEndpoint: `${env.ACCOUNT_ISSUER}/authorize`, tokenEndpoint: `${env.ACCOUNT_ISSUER}/token`,
+        allowPlainPKCE: false,
         resourceMatchOriginOnly: false, resourceMetadata: { resource: env.RESOURCE, authorization_servers: [env.ACCOUNT_ISSUER] }, scopesSupported: ['repository:read'],
       });
       // Library-required property is mapped ONLY to this new isolated namespace; never legacy runtime storage.
