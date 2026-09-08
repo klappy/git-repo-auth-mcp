@@ -1,4 +1,3 @@
-import { registrationEnabled, registrationLedger, registrationTarget } from './staging-registration';
 import { CompactEncrypt, compactDecrypt, decodeProtectedHeader } from 'jose';
 import { AccessDenied } from './session';
 import { resolveIdentity, verifyIdentity, type AccountIdentity } from './identity-registry';
@@ -346,11 +345,6 @@ export class AccountBrowserSessions implements DurableObject {
       const store = new BrowserSessions(this.state.storage, decodeKey(this.env.BROWSER_SESSION_KEY_HEX), this.env.BROWSER_SESSION_KEY_ID, previous.map(p => { if (p.keyHex === this.env.VAULT_KEY_HEX) throw new AccessDenied(); return { id: p.id, key: decodeKey(p.keyHex), notAfter: p.notAfter }; }));
       const text = await request.text(); if (text.length > 16384) throw new AccessDenied();
       const b = JSON.parse(text) as { operation: string; handle: string; activeHandle?: string; nonce: string; state: string; lease: string; transaction: IdentityTransaction; githubId: number; identity: AccountIdentity; consume?: boolean; proof: string; continuationRef?: string; restart?: boolean; ref: string; intent: ContinuationIntent; next: 'awaiting_repository' | 'ready_for_connector' };
-      if (['registration-admit', 'registration-write-started', 'registration-written'].includes(b.operation)) {
-        const env = this.env as BrowserEnv & AccountEnv;
-        if (!registrationEnabled(env) || !env.ACCOUNT_BROWSER_SESSIONS || !this.state.id.equals(env.ACCOUNT_BROWSER_SESSIONS.idFromName(registrationTarget.objectName))) throw new AccessDenied();
-        return Response.json(await registrationLedger(this.state.storage, JSON.parse(text)));
-      }
       if (b.operation === 'repository-start-status') return Response.json(await store.repositoryStartStatus());
       if (b.operation === 'repository-start') {
         const value = JSON.parse(text) as { handle: string; lease: string; purpose: 'account' | 'connector'; continuationRef?: string; assertion: string };
