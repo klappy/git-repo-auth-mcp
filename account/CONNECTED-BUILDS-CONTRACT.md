@@ -1,5 +1,9 @@
 # Account staging connected-build contract
 
+## Current exposure phase
+
+The reviewed exposure candidate uses new isolated branch `dish/2026-09-07-native-staging-public` in both repositories. Original staging branches remain frozen; their settings below are historical disabled-build wiring. Root updates triggers only after exact new-ref review and integration. Account route is solely account-staging.klappy.dev in the approved zone, metadata enabled and PRIVATE_ACTIVATION disabled. Require effective parent logging off before exposure. Correct account deployment command is `npx --no-install wrangler deploy --config account/wrangler.staging.jsonc --experimental-autoconfig=false`; the earlier autoconfig flag below was an author verification error, corrected by the separate failure receipt. No account dependency upgrade or guard implementation is implied.
+
 Build-token capability correction: the earlier operator-only prerequisite was an invented restriction and is withdrawn. Root may use existing opaque same-repository/account Build-token references for the independently approved exact new-staging build after its documented configuration and trigger checks. The service authorization response resolves capability; no new privilege or secret read is implied. Token-policy read returned9109 Unauthorized and remains STOPPED. A build denial stops the affected action, with no alternate credential or policy-read retry. Protected operator provisioning is an option for a concrete capability gap, not a prerequisite inferred from the failed policy read.
 
 Otto accepted this contract-only design before authoring. Root owns live control-plane operations. No account dependency or helper is added. This document does not authorize activation or replace approved setup limits.
@@ -30,3 +34,15 @@ Keep the connected trigger disabled until the exact reviewed ID-bearing config, 
 First deployment remains unexposed: workers.dev/previews false and routes empty. Read back deployed version, three class bindings, allocated KV and disabled private mode. Root then follows its separately reviewed staging-only hostname/logging sequence to expose read-only metadata. Metadata discovery is not GitHub sign-in, client registration, native grant or release acceptance. Actual provider/client custody setup remains separate. Do not add a route or private activation through a CLI override.
 
 Installed Wrangler4.99.0 deploy help was executed locally and confirms config/autoconfig flags; no deployment command was executed. Cloudflare documents separate build/deploy commands and preview replacement in [Build configuration](https://developers.cloudflare.com/workers/ci-cd/builds/configuration/), and connected Worker-name matching in [Troubleshooting](https://developers.cloudflare.com/workers/ci-cd/builds/troubleshoot/). These are command contracts, not proof that the control plane has been configured. No API payload was invented or stopped schema route retried.
+
+## Required fixed-commit deployment preflight
+
+Root observed an automatic push deploy an unreviewed commit. Both public staging triggers must therefore refuse every checkout except the exact independently reviewed40-character commit SHA, before invoking Wrangler. Earlier unqualified deployment command rows are superseded: each command below runs only after this fixed-commit preflight. Root writes the actual literal SHA into the control-plane command after publication; it is not a source environment variable, branch-tip lookup or a source file containing its own hash. No placeholder command may be activated.
+
+Preflight command template (replace REVIEWED_40_HEX_COMMIT with the actual reviewed lowercase40-hex SHA before saving):
+
+```sh
+node -e 'const {execFileSync}=require("node:child_process"); const expected="REVIEWED_40_HEX_COMMIT"; if(!/^[a-f0-9]{40}$/.test(expected)||execFileSync("git",["rev-parse","HEAD"],{encoding:"utf8"}).trim()!==expected) process.exit(1)'
+```
+
+Use `&&` to connect this preflight to the exact deployment command, so failure prevents Wrangler. Account then runs `npx --no-install wrangler deploy --config account/wrangler.staging.jsonc --experimental-autoconfig=false`. Consumer then runs `node scripts/validate-staging-deployment.mjs && npx --no-install wrangler deploy --config wrangler.staging.jsonc --autoconfig=false`; preserve its explicit public-only phase, allocated ID, Worker-name and branch checks. Each repository has its own fixed reviewed SHA. Root reads back the complete stored command and pinned SHA before triggering. Any newer automatic commit fails closed until independently reviewed and explicitly repinned. Otto accepted this requirement; no frozen config/test file changed in this documentation amendment.

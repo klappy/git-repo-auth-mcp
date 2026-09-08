@@ -1,5 +1,9 @@
 # Disabled account staging preparation
 
+## Current exposure candidate
+
+The current reviewed candidate config declares only the approved account-staging.klappy.dev custom domain, with metadata discovery enabled and PRIVATE_ACTIVATION disabled. This supersedes earlier descriptions of the current configuration as routes-empty or unexposed; those descriptions remain historical preparation evidence. See [PUBLIC-STAGING-EXPOSURE.md](PUBLIC-STAGING-EXPOSURE.md) for the exact Git-controlled exposure sequence, logging and fixed-commit deployment preflight. A declared route is not proof of actual hostname exposure or a successful live build; neither is claimed here.
+
 ## Current allocation update
 
 Root subsequently allocated and read back `native-account-connector-staging-v15`, ID `f1175de951844fbd80942d82c8416903`. The current configuration contains this exact32-character ID; its SHA256 is `5e8cc5fcf5c2dfdd7754549cf229f61728ab26f1e373af36f88eabbb14361230`. The ID-unassigned description below records the initial preparation state. This allocation closes that specific missing-ID prerequisite, not project wiring, token authority, logging, live deployment or activation proof. Account has a documented connected-build command, not an executable account predeploy guard; root must hold the trigger until the exact ID-bearing configuration and project settings are verified.
