@@ -1,6 +1,6 @@
 # Account staging connected-build contract
 
-Build-token capability disposition: root observed existing opaque product build tokens with owner_type=user. Its policy read returned9109 Unauthorized; that route is stopped, without retry or alternate credential. An authorized operator must verify the existing token's target authority through protected administration or provision a narrowly scoped token through protected entry. A new token is not required merely because its name differs. Never return token values to chat, source or model-visible tooling. Root retains all mutations; this document supplies no secret or invented token policy.
+Build-token capability correction: the earlier operator-only prerequisite was an invented restriction and is withdrawn. Root may use existing opaque same-repository/account Build-token references for the independently approved exact new-staging build after its documented configuration and trigger checks. The service authorization response resolves capability; no new privilege or secret read is implied. Token-policy read returned9109 Unauthorized and remains STOPPED. A build denial stops the affected action, with no alternate credential or policy-read retry. Protected operator provisioning is an option for a concrete capability gap, not a prerequisite inferred from the failed policy read.
 
 Otto accepted this contract-only design before authoring. Root owns live control-plane operations. No account dependency or helper is added. This document does not authorize activation or replace approved setup limits.
 
