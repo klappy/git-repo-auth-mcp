@@ -15,7 +15,18 @@ export function accountPage(input: { subject?: string; csrf?: string; connected?
 }
 // Same-origin forms need their Origin for CSRF validation. Cross-origin navigations
 // still suppress Referer, keeping OAuth query data away from external destinations.
-export function browserHeaders() { return { 'Cache-Control': 'private, no-store', 'CDN-Cache-Control': 'no-store', 'Cloudflare-CDN-Cache-Control': 'no-store', 'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'", 'Referrer-Policy': 'same-origin', 'X-Content-Type-Options': 'nosniff' }; }
+export function browserHeaders(registeredRedirectUri?: string) {
+  // Redirected form submissions are checked against the originating document's
+  // CSP. Permit the fixed provider and, only on consent pages, the callback
+  // already verified against the registered client by the account routes.
+  let callbackOrigin = '';
+  if (registeredRedirectUri) {
+    const callback = new URL(registeredRedirectUri);
+    if (!['https:', 'http:'].includes(callback.protocol) || callback.username || callback.password || !/^https?:\/\/(?:[a-z0-9.-]+|\[[0-9a-f:.]+\])(?::[0-9]+)?$/i.test(callback.origin)) throw new Error('Invalid registered callback');
+    callbackOrigin = ' ' + callback.origin;
+  }
+  return { 'Cache-Control': 'private, no-store', 'CDN-Cache-Control': 'no-store', 'Cloudflare-CDN-Cache-Control': 'no-store', 'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; form-action 'self' https://github.com" + callbackOrigin + "; frame-ancestors 'none'; base-uri 'none'", 'Referrer-Policy': 'same-origin', 'X-Content-Type-Options': 'nosniff' };
+}
 export function consentPage(input: { client: string; resource: string; csrf: string; authorizationUrl: string; continuationRef?: string }) {
   return `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Approve connection</title><style>${accountStyles}</style><main><h1>Approve connection</h1><p>${escape(input.client)} requests repository read access through ${escape(input.resource)}.</p><p>This does not change GitHub’s broad upstream repository grant. Provider credentials stay on the server.</p><form method="post" action="/authorize"><input type="hidden" name="csrf" value="${escape(input.csrf)}">${input.continuationRef ? `<input type="hidden" name="continuation" value="${escape(input.continuationRef)}">` : `<input type="hidden" name="authorizationUrl" value="${escape(input.authorizationUrl)}">`}<button name="decision" value="approve">Approve connection</button><button name="decision" value="deny">Cancel</button></form><p><a href="/account/public">Continue with public access</a></p></main></html>`;
 }

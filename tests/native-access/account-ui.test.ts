@@ -2,7 +2,7 @@ import { it, expect, vi } from 'vitest';
 vi.mock('cloudflare:workers', () => ({ WorkerEntrypoint: class {} }));
 import worker from '../../account/broker';
 import type { AccountEnv } from '../../account/broker';
-import { accountPage } from '../../account/account-ui';
+import { accountPage, browserHeaders } from '../../account/account-ui';
 it('production account login stays unavailable; opaque/public pages and all errors bypass caches', async () => {
   const env = { ACCOUNT_ISSUER: 'https://account.example.test', PRIVATE_ACTIVATION: 'disabled' } as AccountEnv;
   const ctx = { waitUntil() {}, passThroughOnException() {} } as unknown as ExecutionContext;
@@ -58,6 +58,7 @@ it('maintained registered-client browser consent accepts/cancels safely and reje
     // Real host key shape: ui_locales is presentation only, stripped from the form.
     const localized = new URL(auth); localized.searchParams.set('ui_locales', 'en-US fr');
     const localizedPage = await send(localized.toString()); expect(localizedPage.status).toBe(200);
+    expect(localizedPage.headers.get('Content-Security-Policy')).toContain("form-action 'self' https://github.com https://client.example.test;");
     const localizedHtml = await localizedPage.text(); expect(localizedHtml).toContain('Fixture connector'); expect(localizedHtml).not.toContain('ui_locales');
     for (const value of ['', 'en_US', ' en', 'en ', 'en  fr', 'en\tfr', '<script>', 'a'.repeat(257), Array(9).fill('en').join(' '), 'en-abcdefghi']) {
       const malformed = new URL(auth); malformed.searchParams.set('ui_locales', value);
@@ -81,4 +82,14 @@ it('maintained registered-client browser consent accepts/cancels safely and reje
     expect((await post('approve', csrf)).status).toBe(403); // Bootstrap absence is not repository authority.
     for (const r of [page, denied, approved]) expect(r.headers.get('Cache-Control')).toBe('private, no-store');
   } finally { vi.unstubAllGlobals(); }
+});
+
+
+it('limits form redirects to the fixed provider and a serialized registered callback origin', () => {
+  const base = browserHeaders()['Content-Security-Policy'];
+  expect(base).toContain("form-action 'self' https://github.com;");
+  const consent = browserHeaders('https://chatgpt.com/connector/oauth/fixture?state=INERT')['Content-Security-Policy'];
+  expect(consent).toContain("form-action 'self' https://github.com https://chatgpt.com;");
+  expect(consent).not.toContain('INERT');
+  for (const uri of ['https://*.example.test/callback', 'https://safe.test;script-src/callback', 'https://user:pass@example.test/callback', 'javascript:alert(1)', 'data:text/plain,fixture', 'https://bad_host.test/callback', 'not a URL']) expect(() => browserHeaders(uri)).toThrow();
 });
