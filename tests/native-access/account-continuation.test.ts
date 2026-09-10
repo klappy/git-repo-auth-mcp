@@ -123,6 +123,13 @@ it('native first setup preserves original client state/S256 through identity, ex
     const entryResponse = await send('/authorize?' + q); expect(entryResponse.status).toBe(303); expect(entryResponse.headers.get('Location')).toBe('/account/continue');
     expect((await send('/account/continue')).headers.get('Location')).toBe('/account/signin');
     const signin = await send('/account/signin'), loginForm = form(await signin.text()); expect(loginForm.get('continuation')).toMatch(/^[a-f0-9]{64}$/);
+    expect(signin.headers.get('Referrer-Policy')).toBe('same-origin');
+    // A browser using the former no-referrer policy sends Origin:null. Keep
+    // rejecting that request (and cross-site requests); fix the document policy.
+    for (const origin of ['null', 'https://evil.invalid']) {
+      const denied = await send('/account/signin', { method: 'POST', body: loginForm.toString(), headers: { Origin: origin } });
+      expect(denied.status).toBe(503); expect(denied.headers.get('Location')).toBeNull();
+    }
     const login = await send('/account/signin', { method: 'POST', body: loginForm.toString() }); expect(login.status).toBe(303); expect(calls).toEqual([]);
     const loginState = new URL(login.headers.get('Location')!).searchParams.get('state');
     const identity = await send('/account/callback?code=identity&state=' + loginState); expect(identity.status).toBe(303); expect(identity.headers.get('Location')).toBe('/account/continue');
@@ -130,7 +137,7 @@ it('native first setup preserves original client state/S256 through identity, ex
     const repo = await send('/account/repositories/connect', { method: 'POST', body: form(repoHtml).toString() }); expect(repo.status).toBe(303);
     const repoState = new URL(repo.headers.get('Location')!).searchParams.get('state'); expect(new URL(repo.headers.get('Location')!).searchParams.get('scope')).toBe('repo offline_access');
     const connected = await send('/oauth/callback?code=repository&state=' + repoState); expect(connected.status).toBe(303); expect(connected.headers.get('Location')).toBe('/account/continue');
-    const consent = await send('/account/continue'), consentHtml = await consent.text(); expect(consentHtml).toContain('Fixture connector'); const approval = form(consentHtml); approval.set('decision', 'approve');
+    const consent = await send('/account/continue'); expect(consent.headers.get('Content-Security-Policy')).toContain("form-action 'self' https://github.com https://client.example.test;"); const consentHtml = await consent.text(); expect(consentHtml).toContain('Fixture connector'); const approval = form(consentHtml); approval.set('decision', 'approve');
     const approved = await send('/authorize', { method: 'POST', body: approval.toString() }); expect(approved.status).toBe(303); const target = new URL(approved.headers.get('Location')!); expect(target.origin + target.pathname).toBe(intent.redirectUri); expect(target.searchParams.get('state')).toBe('exact-client-state');
     const token = await send('/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ grant_type: 'authorization_code', client_id: 'fixture', redirect_uri: intent.redirectUri, resource: h.env.RESOURCE, code: target.searchParams.get('code')!, code_verifier: verifier }).toString() }); expect(token.status).toBe(200);
     expect((await send('/authorize', { method: 'POST', body: approval.toString() })).status).toBe(403);

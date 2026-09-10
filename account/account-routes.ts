@@ -8,7 +8,7 @@ import { accountPage, standalonePage, entryPage, browserHeaders, accountDocument
 export interface AccountBrowserEnv extends AccountEnv { ACCOUNT_BROWSER_SESSIONS?: DurableObjectNamespace; ACCOUNT_IDENTITY_REGISTRY?: DurableObjectNamespace; ACCOUNT_LOGIN_CALLBACK?: string; }
 const cookie = (request: Request, name: string) => request.headers.get('Cookie')?.split(';').map(s => s.trim()).find(s => s.startsWith(name + '='))?.slice(name.length + 1) ?? '';
 const setCookie = (name: string, value: string, age = 1800) => `${name}=${value}; Secure; HttpOnly; SameSite=Lax; Path=/; Max-Age=${age}`;
-function response(body: string, status = 200, extra: Record<string, string> = {}) { return new Response(body, { status, headers: { ...browserHeaders(), 'Content-Type': 'text/html; charset=utf-8', ...extra } }); }
+function response(body: string, status = 200, extra: Record<string, string> = {}, registeredRedirectUri?: string) { return new Response(body, { status, headers: { ...browserHeaders(registeredRedirectUri), 'Content-Type': 'text/html; charset=utf-8', ...extra } }); }
 function continuationUnavailable(status: number) { return response(entryPage(), status); }
 async function internal(namespace: DurableObjectNamespace | undefined, name: string, value: unknown) {
   if (!namespace) throw new AccessDenied();
@@ -154,7 +154,7 @@ export function createAccountRoutes(adapter?: LoginAdapter) {
         if (!client || !client.redirectUris.includes(c.intent.redirectUri) || c.intent.resource !== env.RESOURCE) throw new AccessDenied();
         await browser(env, { operation: 'continuation-stage', handle, ref, next: auth.state.status === 'verified' ? 'ready_for_connector' : 'awaiting_repository' });
         if (auth.state.status !== 'verified') return response(accountPage({ subject: session.identity.subject, csrf: session.csrf, connected: false, continuationRef: ref, repositoryStartsBlocked: await repositoryStartsBlocked(env) }));
-        const { consentPage } = await import('./account-ui'); return response(consentPage({ client: client.clientName ?? c.intent.clientId, resource: env.RESOURCE, csrf: session.csrf, authorizationUrl: '', continuationRef: ref }));
+        const { consentPage } = await import('./account-ui'); return response(consentPage({ client: client.clientName ?? c.intent.clientId, resource: env.RESOURCE, csrf: session.csrf, authorizationUrl: '', continuationRef: ref }), 200, {}, c.intent.redirectUri);
       }
       if (repositoryCallback) {
         if (request.method !== 'GET' || url.origin + path !== env.GITHUB_CALLBACK) throw new AccessDenied();
@@ -244,7 +244,7 @@ export function createAccountConsent(_adapter?: LoginAdapter) {
       await browser(env, { operation: 'touch', handle });
       if (request.method === 'GET') {
         const { consentPage } = await import('./account-ui');
-        return response(consentPage({ client: client.clientName ?? auth.clientId, resource: env.RESOURCE, csrf: session.csrf, authorizationUrl }));
+        return response(consentPage({ client: client.clientName ?? auth.clientId, resource: env.RESOURCE, csrf: session.csrf, authorizationUrl }), 200, {}, auth.redirectUri);
       }
       if (decision === 'deny') {
         if (continuationRef) await browser(env, { operation: 'continuation-retire', handle: session.browserHandle, ref: continuationRef });
