@@ -16,7 +16,7 @@ export interface TransactionStore {
 }
 export interface OAuthConfig { clientId: string; clientSecret: string; callback: string; fetch: typeof fetch; }
 export interface IdentityTransaction { kind: 'identity-bootstrap'; state: string; verifier: string; callback: string; expiresAt: number; }
-const server: oauth.AuthorizationServer = { issuer: 'https://github.com', authorization_endpoint: 'https://github.com/login/oauth/authorize', token_endpoint: 'https://github.com/login/oauth/access_token' };
+const server: oauth.AuthorizationServer = { issuer: 'https://github.com/login/oauth', authorization_endpoint: 'https://github.com/login/oauth/authorize', token_endpoint: 'https://github.com/login/oauth/access_token' };
 export function normalizedScopes(scope: unknown): string[] {
   if (typeof scope !== 'string' || !/^[A-Za-z0-9:_-]+(?:[ ,]+[A-Za-z0-9:_-]+)*$/.test(scope.trim())) throw new AccessDenied();
   return [...new Set(scope.split(/[ ,]+/).filter(Boolean))].sort();
