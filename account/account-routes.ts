@@ -212,8 +212,18 @@ export function createAccountConsent(_adapter?: LoginAdapter) {
       } else if (request.method !== 'GET') throw new AccessDenied();
       const target = new URL(authorizationUrl);
       if (target.origin !== here.origin || target.pathname !== '/authorize') throw new AccessDenied();
-      const allowedParameters = ['client_id', 'redirect_uri', 'response_type', 'scope', 'state', 'resource', 'code_challenge', 'code_challenge_method'];
+      const allowedParameters = ['client_id', 'redirect_uri', 'response_type', 'scope', 'state', 'resource', 'code_challenge', 'code_challenge_method', 'ui_locales'];
       if ([...target.searchParams.keys()].some(key => !allowedParameters.includes(key) || target.searchParams.getAll(key).length !== 1)) throw new AccessDenied();
+      // Optional host presentation hint, never part of authorization or continuation custody.
+      // Validate a bounded locale list with the runtime's maintained language-tag parser.
+      if (target.searchParams.has('ui_locales')) {
+        const locales = single(target.searchParams, 'ui_locales');
+        const tags = locales.split(' ');
+        if (!locales || locales.length > 256 || tags.length > 8 || tags.some(tag => !tag || /[^A-Za-z0-9-]/.test(tag))) throw new AccessDenied();
+        Intl.getCanonicalLocales(tags); // Malformed language tags throw into the denial path.
+        target.searchParams.delete('ui_locales');
+        authorizationUrl = target.toString();
+      }
       const auth = await helpers.parseAuthRequest(new Request(target)), client = await helpers.lookupClient(auth.clientId);
       if (!client || !client.redirectUris.includes(auth.redirectUri) || auth.resource !== env.RESOURCE || auth.scope.length !== 1 || auth.scope[0] !== 'repository:read') throw new AccessDenied();
       let session: BrowserSession | undefined;

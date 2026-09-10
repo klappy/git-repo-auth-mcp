@@ -115,7 +115,11 @@ it('native first setup preserves original client state/S256 through identity, ex
   const send = async (path: string, init: { method?: string; body?: string; headers?: Record<string, string> } = {}) => { const r = await mf.dispatchFetch(h.env.ACCOUNT_ISSUER + path, { ...init, redirect: 'manual', headers: { Cookie: [...jar].map(([k, v]) => k + '=' + v).join('; '), Origin: h.env.ACCOUNT_ISSUER, ...init.headers } }); for (const value of r.headers.getSetCookie()) { const [pair] = value.split(';'), i = pair.indexOf('='); jar.set(pair.slice(0, i), pair.slice(i + 1)); } return r; };
   const form = (html: string) => { const values = new URLSearchParams(); for (const [, key, value] of html.matchAll(/<input type="hidden" name="([^"]+)" value="([^"]*)">/g)) values.set(key, value.replace(/&amp;/g, '&')); return values; };
   try {
-    await send('/__seed'); const q = new URLSearchParams({ client_id: 'fixture', redirect_uri: intent.redirectUri, response_type: 'code', scope: 'repository:read', resource: h.env.RESOURCE, state: 'exact-client-state', code_challenge: challenge, code_challenge_method: 'S256' });
+    // The observed ChatGPT authorization key shape, with synthetic values only.
+    await send('/__seed'); const q = new URLSearchParams({ response_type: 'code', client_id: 'fixture', redirect_uri: intent.redirectUri, scope: 'repository:read', code_challenge: challenge, code_challenge_method: 'S256', resource: h.env.RESOURCE, state: 'exact-client-state', ui_locales: 'en-US' });
+    for (const [key, value] of [['response_type', 'token'], ['code_challenge_method', 'plain'], ['code_challenge', ''], ['state', ''], ['scope', 'repository:write'], ['resource', 'https://wrong.invalid/mcp'], ['redirect_uri', 'https://wrong.invalid/callback']]) {
+      const bad = new URLSearchParams(q); bad.set(key, value); expect((await send('/authorize?' + bad)).status).toBe(403);
+    }
     const entryResponse = await send('/authorize?' + q); expect(entryResponse.status).toBe(303); expect(entryResponse.headers.get('Location')).toBe('/account/continue');
     expect((await send('/account/continue')).headers.get('Location')).toBe('/account/signin');
     const signin = await send('/account/signin'), loginForm = form(await signin.text()); expect(loginForm.get('continuation')).toMatch(/^[a-f0-9]{64}$/);
