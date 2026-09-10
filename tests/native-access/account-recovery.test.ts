@@ -94,7 +94,7 @@ it('real production login activates encrypted browser authority and reaches sign
   expect(JSON.stringify([...data.values()])).not.toContain('INERT_IDENTITY');
 });
 
-it('local workerd completes the production adapter callback through the actual browser DO and signed bootstrap', async () => {
+it.each(['standalone', 'connector', 'connector-extra-signin-get'])('local workerd completes the production adapter callback through the actual browser DO and signed bootstrap: %s', async mode => {
   const key = await generateKeyPair('ES256', { extractable: true });
   const output = await build({ stdin: { contents: `
     export {AccountBrowserSessions} from './account/browser-session';
@@ -107,22 +107,39 @@ it('local workerd completes the production adapter callback through the actual b
       return Response.json({access_token:'INERT_IDENTITY',token_type:'bearer',scope:'read:user'});
     }});
     const routes=createAccountRoutes(adapter);
-    export default {async fetch(r,e){return routes(r,{...e,ACCOUNT_BROWSER_SESSIONS:e.SESSIONS,ACCOUNT_GRANTS:{idFromName:()=> 'fixture',get:()=>({fetch:async request=>{
+    export default {async fetch(r,e){
+      if(new URL(r.url).pathname==='/fixture/continuation'){
+        await e.ACCOUNT_CONNECTOR_KV.put('client:synthetic',JSON.stringify({clientId:'synthetic',clientName:'Synthetic connector',redirectUris:['https://chatgpt.com/connector/oauth/synthetic'],tokenEndpointAuthMethod:'none',grantTypes:['authorization_code'],responseTypes:['code']}));
+        const handle='a'.repeat(64),result=await e.SESSIONS.get(e.SESSIONS.idFromName('account-authority-v2')).fetch('https://internal.invalid/',{method:'POST',body:JSON.stringify({operation:'continuation-create',handle,intent:{clientId:'synthetic',redirectUri:'https://chatgpt.com/connector/oauth/synthetic',state:'synthetic',responseType:'code',codeChallenge:'A'.repeat(43),codeChallengeMethod:'S256',resource:e.RESOURCE,scope:['repository:read']}})});
+        const value=await result.json();return Response.json({handle,ref:value.ref});
+      }
+      return routes(r,{...e,ACCOUNT_BROWSER_SESSIONS:e.SESSIONS,ACCOUNT_GRANTS:{idFromName:()=> 'fixture',get:()=>({fetch:async request=>{
       const v=await jwtVerify(request.headers.get('Authorization').slice(7),await importJWK(JSON.parse(e.PUBLIC_KEY),'ES256'),{issuer:e.ACCOUNT_ISSUER,audience:e.BROKER_AUDIENCE});
       if(v.payload.github_id!==1001)throw new Error('identity mismatch');
       return Response.json({generation:1,status:'absent'});
     }})}},async()=>new Response('',{status:403}));}};
   `, resolveDir: process.cwd(), loader: 'ts' }, bundle: true, write: false, format: 'esm', platform: 'browser', external: ['cloudflare:workers'] });
-  const mf = new Miniflare({ modules: true, script: output.outputFiles[0].text, compatibilityDate: '2026-06-16', host: '127.0.0.1', port: 0, cf: false, bindings: { BROWSER_SESSION_KEY_HEX: 'ab'.repeat(32), PRIVATE_ACTIVATION: 'owner-verified', ACCOUNT_ISSUER: 'https://account.example.test', ACCOUNT_LOGIN_CALLBACK: callback, ACCOUNT_SIGNING_JWK: JSON.stringify({ ...await exportJWK(key.privateKey), kid: 'fixture' }), PUBLIC_KEY: JSON.stringify(await exportJWK(key.publicKey)), SERVICE: 'navigator', RESOURCE: 'https://navigator.example.test/mcp', BROKER_AUDIENCE: 'https://broker.example.test/read' }, durableObjects: { SESSIONS: { className: 'AccountBrowserSessions', useSQLite: true } } });
+  const mf = new Miniflare({ modules: true, script: output.outputFiles[0].text, compatibilityDate: '2026-06-16', host: '127.0.0.1', port: 0, cf: false, bindings: { BROWSER_SESSION_KEY_HEX: 'ab'.repeat(32), PRIVATE_ACTIVATION: 'owner-verified', ACCOUNT_ISSUER: 'https://account.example.test', ACCOUNT_LOGIN_CALLBACK: callback, ACCOUNT_SIGNING_JWK: JSON.stringify({ ...await exportJWK(key.privateKey), kid: 'fixture' }), PUBLIC_KEY: JSON.stringify(await exportJWK(key.publicKey)), SERVICE: 'navigator', RESOURCE: 'https://navigator.example.test/mcp', BROKER_AUDIENCE: 'https://broker.example.test/read' }, durableObjects: { SESSIONS: { className: 'AccountBrowserSessions', useSQLite: true } }, kvNamespaces: ['ACCOUNT_CONNECTOR_KV'] });
   try {
-    const signin = await mf.dispatchFetch('https://account.example.test/account/signin'); expect(signin.status).toBe(200);
+    let continuationCookie = '', initialCookie = '';
+    if (mode !== 'standalone') {
+      const created = await (await mf.dispatchFetch('https://account.example.test/fixture/continuation')).json() as { handle: string; ref: string };
+      continuationCookie = '; __Host-account_continuation=' + created.ref; initialCookie = '__Host-account_browser=' + created.handle + continuationCookie;
+      const continued = await mf.dispatchFetch('https://account.example.test/account/continue', { redirect: 'manual', headers: { Cookie: initialCookie } }); expect(continued.status).toBe(303); expect(continued.headers.get('Location')).toBe('/account/signin');
+    }
+    const signin = await mf.dispatchFetch('https://account.example.test/account/signin', { headers: { Cookie: initialCookie } }); expect(signin.status).toBe(200);
     const browserCookie = signin.headers.get('Set-Cookie')!.split(';')[0], nonce = (await signin.text()).match(/name="csrf" value="([^"]+)"/)![1];
-    const start = await mf.dispatchFetch('https://account.example.test/account/signin', { method: 'POST', redirect: 'manual', headers: { Cookie: browserCookie, Origin: 'https://account.example.test' }, body: new URLSearchParams({ csrf: nonce }).toString() }); expect(start.status).toBe(303);
+    const start = await mf.dispatchFetch('https://account.example.test/account/signin', { method: 'POST', redirect: 'manual', headers: { Cookie: browserCookie + continuationCookie, Origin: 'https://account.example.test' }, body: new URLSearchParams({ csrf: nonce, ...(continuationCookie ? { continuation: continuationCookie.split('=')[1] } : {}) }).toString() }); expect(start.status).toBe(303);
     const state = new URL(start.headers.get('Location')!).searchParams.get('state')!, loginCookie = start.headers.get('Set-Cookie')!.split(';')[0];
     const callbackUrl = callback + '?code=synthetic&state=' + state;
-    const completed = await mf.dispatchFetch(callbackUrl, { redirect: 'manual', headers: { Cookie: browserCookie + '; ' + loginCookie } }); expect(completed.status, await completed.clone().text()).toBe(303);
+    if (mode === 'connector-extra-signin-get') {
+      const reread = await mf.dispatchFetch('https://account.example.test/account/signin', { headers: { Cookie: browserCookie + continuationCookie + '; ' + loginCookie } }); expect(reread.status).toBe(200); const html = await reread.text(); expect(html).toContain('GitHub sign-in is already in progress'); expect(html).toContain('action="/account/continuation/cancel"'); expect(html).not.toContain('action="/account/signin"'); expect(reread.headers.get('Set-Cookie')).toContain(browserCookie);
+    }
+    const completed = await mf.dispatchFetch(callbackUrl, { redirect: 'manual', headers: { Cookie: browserCookie + continuationCookie + '; ' + loginCookie } }); expect(completed.status, await completed.clone().text()).toBe(303);
     const sessionCookie = completed.headers.get('Set-Cookie')!.match(/__Host-account_session=([^;]+)/)![0];
-    const account = await mf.dispatchFetch('https://account.example.test/account', { headers: { Cookie: browserCookie + '; ' + sessionCookie } }); expect(account.status).toBe(200); const html = await account.text(); expect(html).toContain('Repository access is not connected.'); expect(html).not.toContain('INERT_');
+    expect(completed.headers.get('Location')).toBe(mode === 'standalone' ? '/account' : '/account/continue');
+    const returned = await mf.dispatchFetch('https://account.example.test' + completed.headers.get('Location'), { headers: { Cookie: browserCookie + continuationCookie + '; ' + sessionCookie } }); expect(returned.status, await returned.clone().text()).toBe(200); expect(await returned.text()).toContain('Repository access is not connected.');
+    const account = await mf.dispatchFetch('https://account.example.test/account', { headers: { Cookie: browserCookie + continuationCookie + '; ' + sessionCookie } }); expect(account.status).toBe(200); const html = await account.text(); expect(html).toContain('Repository access is not connected.'); expect(html).not.toContain('INERT_');
     const replay = await mf.dispatchFetch(callbackUrl, { redirect: 'manual', headers: { Cookie: browserCookie + '; ' + loginCookie } }); expect(replay.status).toBe(503); expect(await replay.text()).toContain('<code>callback-transaction</code>');
   } finally { await mf.dispose(); }
 }, 30_000);

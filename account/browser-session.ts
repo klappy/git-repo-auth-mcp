@@ -161,6 +161,15 @@ export class BrowserSessions {
       if (restart) pending.restart = { refHash, slotHash: cont?.refHash, revision: this.revision(ledger), generation: ledger.generation };
       else if (!refHash) pending.unbound = { revision: this.revision(ledger), generation: ledger.generation };
       if (cont) { if (!restart) { pending.continuationHash = cont.refHash; pending.expiresAt = Math.min(pending.expiresAt, cont.expiresAt); } if (cont.expected) { pending.expected = cont.expected; pending.expectedEpoch = cont.expectedEpoch; } }
+      // A page re-read must not supersede an already dispatched GitHub transaction.
+      // Reuse only after all current bindings above have been checked; never extend its lease.
+      const existingRaw = await tx.get<string>('pending:v2:' + browserHash);
+      if (existingRaw) {
+        const existing = await this.open<Pending>(existingRaw);
+        if (existing.version === 2 && existing.transaction?.kind === 'identity-bootstrap' && existing.transaction.expiresAt > Date.now() && existing.expiresAt > Date.now() && existing.browser === pending.browser && existing.browserHandle === browser && existing.generation === ledger.generation && existing.nonce === ledger.pendingNonce && existing.continuationHash === pending.continuationHash && JSON.stringify(existing.restart) === JSON.stringify(pending.restart) && JSON.stringify(existing.unbound) === JSON.stringify(pending.unbound) && JSON.stringify(existing.expected) === JSON.stringify(pending.expected) && existing.expectedEpoch === pending.expectedEpoch) {
+          return { nonce: existing.nonce, expiresAt: existing.expiresAt, browserHandle: browser, pending: true };
+        }
+      }
       for (const [limitKey, limit] of [['attempt:v2:' + browserHash, 10], ['attempt:v2:global', 1000]] as const) {
         const window = Math.floor(Date.now() / 60000), counter = await tx.get<{ window: number; count: number }>(limitKey);
         const count = counter?.window === window ? counter.count + 1 : 1; if (count > limit) throw new AccessDenied(); await tx.put(limitKey, { window, count });
