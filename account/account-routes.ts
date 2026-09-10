@@ -3,6 +3,7 @@ import type { AccountEnv } from './broker';
 import { AccessDenied } from './session';
 import { productionLogin, type LoginAdapter } from './login';
 import type { IdentityTransaction } from './oauth';
+import { IdentityRecoveryFailure, recoveryNotice, type RecoveryReference } from './recovery';
 import { opaque, type BrowserSession, type ContinuationIntent } from './browser-session';
 import { accountPage, standalonePage, entryPage, browserHeaders, accountDocument, publicExplorerUrl, escape } from './account-ui';
 export interface AccountBrowserEnv extends AccountEnv { ACCOUNT_BROWSER_SESSIONS?: DurableObjectNamespace; ACCOUNT_IDENTITY_REGISTRY?: DurableObjectNamespace; ACCOUNT_LOGIN_CALLBACK?: string; }
@@ -45,6 +46,7 @@ export function createAccountRoutes(adapter?: LoginAdapter) {
     const repositoryCallback = path === '/oauth/callback' && Boolean(cookie(request, '__Host-account_session'));
     if (!path.startsWith('/account') && !repositoryCallback) return null;
     let activationProof: string | undefined;
+    let recoveryReference: RecoveryReference | undefined;
     try {
       if (path === '/account/public' && request.method === 'GET') return response(accountDocument('Public access', '<h1>Public access remains available</h1><p>Cartographer’s public explorer can be opened without this account sign-in. Private repositories require separate authorized access.</p><a href="' + escape(publicExplorerUrl(env.RESOURCE)) + '">Open Cartographer public explorer</a><p><a href="/account">Account access</a></p>'));
       if (path === '/account/continuation/cancel' && request.method === 'POST') {
@@ -70,15 +72,21 @@ export function createAccountRoutes(adapter?: LoginAdapter) {
         return response(accountPage({ loginCsrf: pending.nonce, continuationRef }), 200, { 'Set-Cookie': setCookie('__Host-account_browser', pending.browserHandle, 28_800) });
       }
       if (path === '/account/callback') {
+        recoveryReference = 'callback-request';
         if (env.PRIVATE_ACTIVATION !== 'owner-verified' || request.method !== 'GET' || url.origin + path !== env.ACCOUNT_LOGIN_CALLBACK) throw new AccessDenied();
         const handle = cookie(request, '__Host-account_browser'), nonce = cookie(request, '__Host-account_login');
+        recoveryReference = 'callback-cookies';
+        if (!handle || !nonce) throw new AccessDenied();
         const continuationRef = continuationCookie(request);
+        recoveryReference = 'callback-transaction';
         const pending = await browser(env, { operation: 'consume', handle, nonce, state: single(url.searchParams, 'state'), continuationRef }) as { transaction: IdentityTransaction; proof: string; continuation: boolean; standalone: boolean };
         activationProof = pending.proof;
         const code = url.searchParams.get('code'); if (!code || code.length > 2048) throw new AccessDenied();
         const verified = await login(adapter, env).complete({ url, transaction: pending.transaction });
+        recoveryReference = 'session-activation';
         const active = await browser(env, { operation: 'activate', githubId: verified.githubId, proof: pending.proof }) as { handle: string };
         activationProof = undefined;
+        recoveryReference = 'session-load';
         await current(env, active.handle);
         const result = response('', 303, { Location: pending.continuation ? '/account/continue' : '/account', 'Set-Cookie': setCookie('__Host-account_session', active.handle) });
         result.headers.append('Set-Cookie', setCookie('__Host-account_browser', handle, 28_800));
@@ -147,7 +155,9 @@ export function createAccountRoutes(adapter?: LoginAdapter) {
         }
       }
       await browser(env, { operation: 'touch', handle });
+      recoveryReference = 'account-bootstrap';
       const auth = await accountAssertion(session, env, handle);
+      recoveryReference = undefined;
       if (path === '/account/continue' && request.method === 'GET') {
         const ref = continuationCookie(request)!, c = await continuation(env, session.browserHandle, ref, handle);
         const helpers = await providerHelpers(env), client = await helpers.lookupClient(c.intent.clientId);
@@ -179,7 +189,14 @@ export function createAccountRoutes(adapter?: LoginAdapter) {
         await current(env, handle); return response('', 303, { Location: '/account' });
       }
       throw new AccessDenied();
-    } catch { if (['/account/repositories/connect', '/account/repositories/cancel', '/account/continuation/cancel', '/account'].includes(path) && await repositoryStartsBlocked(env)) return repositoryStartUnavailable(); if (activationProof) { try { await browser(env, { operation: 'discard', proof: activationProof }); } catch { /* Failed cleanup is still a denied callback; proof remains bounded and token-free. */ } } if (path === '/account' || path === '/account/signin') return response(entryPage(), 503); if (continuationCookie(request)) return continuationUnavailable(503); return response(accountDocument('Account unavailable', '<h1>Account request could not be confirmed</h1><p>If a connection was in progress, it may have completed even if this page did not load. Check your account before starting again. Sign in again to recover the same GitHub identity. To switch accounts, sign out first. Public access remains available.</p><a href="/account">Check account</a><p><a href="/account/signin">Sign in again</a></p><p><a href="/account/public">Continue with public access</a></p>'), 503); }
+    } catch (error) {
+      if (['/account/repositories/connect', '/account/repositories/cancel', '/account/continuation/cancel', '/account'].includes(path) && await repositoryStartsBlocked(env)) return repositoryStartUnavailable();
+      if (activationProof) { try { await browser(env, { operation: 'discard', proof: activationProof }); } catch { /* Failed cleanup is still a denied callback; proof remains bounded and token-free. */ } }
+      const reference = error instanceof IdentityRecoveryFailure ? error.reference : recoveryReference ?? 'account-request';
+      const notice = recoveryNotice(reference) || recoveryNotice('account-request');
+      if (path === '/account' || path === '/account/signin' || continuationCookie(request)) return response(entryPage().replace('<h1>Account recovery</h1>', '<h1>Account recovery</h1>' + notice), 503);
+      return response(accountDocument('Account unavailable', '<h1>Account request could not be confirmed</h1><p>If a connection was in progress, it may have completed even if this page did not load. Check your account before starting again. Sign in again to recover the same GitHub identity. To switch accounts, sign out first. Public access remains available.</p>' + notice + '<a href="/account">Check account</a><p><a href="/account/signin">Sign in again</a></p><p><a href="/account/public">Continue with public access</a></p>'), 503);
+    }
   };
 }
 function login(adapter: LoginAdapter | undefined, env: AccountBrowserEnv): LoginAdapter {
