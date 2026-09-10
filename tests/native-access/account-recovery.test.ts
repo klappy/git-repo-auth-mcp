@@ -59,7 +59,7 @@ it('actual DO preserves unknown-nonce transactions, burns state and continuation
     const handle = 'a'.repeat(64);
     const start = async (continuationRef?: string) => {
       const { nonce } = await (await call({ operation: 'begin', handle, continuationRef })).json() as { nonce: string };
-      const { transaction } = await productionLogin({ clientId: 'synthetic', clientSecret: secret, callback }).begin();
+      const { transaction } = await productionLogin({ clientId: 'synthetic', clientSecret: secret, callback, fetch: async () => { throw new Error('unused'); } }).begin();
       expect((await call({ operation: 'start', handle, nonce, transaction, continuationRef })).status).toBe(200);
       return { nonce, state: transaction.state };
     };
