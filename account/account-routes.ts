@@ -3,7 +3,7 @@ import type { AccountEnv } from './broker';
 import { AccessDenied } from './session';
 import { productionLogin, type LoginAdapter } from './login';
 import type { IdentityTransaction } from './oauth';
-import { IdentityRecoveryFailure, recoveryNotice, type RecoveryReference } from './recovery';
+import { IdentityRecoveryFailure, isConsumeRecoveryReference, recoveryNotice, type RecoveryReference } from './recovery';
 import { opaque, type BrowserSession, type ContinuationIntent } from './browser-session';
 import { accountPage, standalonePage, entryPage, browserHeaders, accountDocument, publicExplorerUrl, escape } from './account-ui';
 export interface AccountBrowserEnv extends AccountEnv { ACCOUNT_BROWSER_SESSIONS?: DurableObjectNamespace; ACCOUNT_IDENTITY_REGISTRY?: DurableObjectNamespace; ACCOUNT_LOGIN_CALLBACK?: string; }
@@ -15,12 +15,18 @@ function signinPending(nonce: string, browserHandle: string, ref?: string, resta
   const cancel = restart || ref ? `<form method="post" action="${restart ? '/account/signin/restart/cancel' : '/account/continuation/cancel'}"><input type="hidden" name="csrf" value="${escape(nonce)}"><input type="hidden" name="continuation" value="${escape(ref ?? '')}">${restart ? '<input type="hidden" name="restart" value="standalone">' : ''}<button>Cancel sign-in</button></form>` : '';
   return response(accountDocument('Sign-in in progress', '<h1>GitHub sign-in is already in progress</h1><p>Finish the GitHub sign-in you already started. Opening this page again has not started another sign-in. If you closed GitHub, this pending sign-in expires within five minutes.</p>' + cancel + '<p><a href="/account">Check account</a></p><p><a href="/account/public">Continue with public access</a></p>'), 200, { 'Set-Cookie': setCookie('__Host-account_browser', browserHandle, 28_800) });
 }
-async function internal(namespace: DurableObjectNamespace | undefined, name: string, value: unknown) {
+async function internal(namespace: DurableObjectNamespace | undefined, name: string, value: unknown, consume = false) {
   if (!namespace) throw new AccessDenied();
   const result = await namespace.get(namespace.idFromName(name)).fetch('https://internal.invalid/', { method: 'POST', body: JSON.stringify(value) });
-  if (!result.ok) throw new AccessDenied(); return result.json();
+  if (!result.ok) {
+    if (consume && result.status === 403) {
+      const body: unknown = await result.json().catch(() => undefined);
+      if (body && typeof body === 'object' && Object.keys(body).sort().join(',') === 'error,reference' && 'error' in body && body.error === 'access_denied' && 'reference' in body && isConsumeRecoveryReference(body.reference)) throw new IdentityRecoveryFailure(body.reference);
+    }
+    throw new AccessDenied();
+  } return result.json();
 }
-async function browser(env: AccountBrowserEnv, value: unknown) { return internal(env.ACCOUNT_BROWSER_SESSIONS, 'account-authority-v2', value); }
+async function browser(env: AccountBrowserEnv, value: unknown) { return internal(env.ACCOUNT_BROWSER_SESSIONS, 'account-authority-v2', value, Boolean(value && typeof value === 'object' && 'operation' in value && value.operation === 'consume')); }
 async function repositoryStartsBlocked(env: AccountBrowserEnv) { try { const status = await browser(env, { operation: 'repository-start-status' }) as { blocked: boolean }; return status.blocked !== false; } catch { return true; } }
 function repositoryStartUnavailable() { return response(accountDocument('Repository connections unavailable', '<h1>New repository connections are temporarily unavailable.</h1><p>A connection may have completed even if this page did not load. Check your account before starting again. Existing access is separate; canceling does not confirm that a connection failed.</p><a href="/account">Check account</a><p><a href="/account/public">Continue with public access</a></p>'), 503); }
 async function current(env: AccountBrowserEnv, handle: string, fresh = false): Promise<BrowserSession> { const s = await browser(env, { operation: 'load', handle }) as BrowserSession; if (s.version !== 2 || (fresh && Date.now() - s.verifiedAt > 300_000)) throw new AccessDenied(); return s; }
@@ -84,10 +90,14 @@ export function createAccountRoutes(adapter?: LoginAdapter) {
         recoveryReference = 'callback-cookies';
         if (!handle || !nonce) throw new AccessDenied();
         const continuationRef = continuationCookie(request);
+        recoveryReference = 'callback-state';
+        const state = single(url.searchParams, 'state');
         recoveryReference = 'callback-transaction';
-        const pending = await browser(env, { operation: 'consume', handle, nonce, state: single(url.searchParams, 'state'), continuationRef }) as { transaction: IdentityTransaction; proof: string; continuation: boolean; standalone: boolean };
+        const pending = await browser(env, { operation: 'consume', handle, nonce, state, continuationRef }) as { transaction: IdentityTransaction; proof: string; continuation: boolean; standalone: boolean };
         activationProof = pending.proof;
+        recoveryReference = 'callback-code';
         const code = url.searchParams.get('code'); if (!code || code.length > 2048) throw new AccessDenied();
+        recoveryReference = 'callback-adapter';
         const verified = await login(adapter, env).complete({ url, transaction: pending.transaction });
         recoveryReference = 'session-activation';
         const active = await browser(env, { operation: 'activate', githubId: verified.githubId, proof: pending.proof }) as { handle: string };

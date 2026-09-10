@@ -60,11 +60,12 @@ export class GitHubOAuth {
     return { url: url.toString(), transaction };
   }
   async completeIdentity(url: URL, tx: IdentityTransaction): Promise<{ githubId: number }> {
-    if (tx.kind !== 'identity-bootstrap' || tx.expiresAt <= Date.now() || tx.callback !== this.config.callback || url.origin + url.pathname !== tx.callback) throw new AccessDenied();
-    const params = oauth.validateAuthResponse(server, this.client, url, tx.state);
-    let reference: RecoveryReference = 'provider-exchange';
+    let reference: RecoveryReference = 'provider-validation';
     let result: oauth.TokenEndpointResponse | undefined;
     try {
+      if (tx.kind !== 'identity-bootstrap' || tx.expiresAt <= Date.now() || tx.callback !== this.config.callback || url.origin + url.pathname !== tx.callback) throw new AccessDenied();
+      const params = oauth.validateAuthResponse(server, this.client, url, tx.state);
+      reference = 'provider-exchange';
       const response = await oauth.authorizationCodeGrantRequest(server, this.client, oauth.ClientSecretPost(this.config.clientSecret), params, tx.callback, tx.verifier, { [oauth.customFetch]: this.config.fetch });
       reference = 'provider-response';
       result = await oauth.processAuthorizationCodeResponse(server, this.client, response);
