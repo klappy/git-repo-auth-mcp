@@ -55,12 +55,25 @@ it('maintained registered-client browser consent accepts/cancels safely and reje
     const auth = new URL(h.env.ACCOUNT_ISSUER + '/authorize'); auth.search = new URLSearchParams({ client_id: 'browser-fixture', redirect_uri: 'https://client.example.test/callback', response_type: 'code', scope: 'repository:read', resource: h.env.RESOURCE, state: 'client-state', code_challenge: await calculatePKCECodeChallenge(generateRandomCodeVerifier()), code_challenge_method: 'S256' }).toString();
     const send = (url: string, init: RequestInit = {}) => provider.fetch(new Request(url, { ...init, headers: { Cookie: '__Host-account_session=' + handle, Origin: h.env.ACCOUNT_ISSUER, ...init.headers } }), env as never, ctx);
     const page = await send(auth.toString()); expect(page.status).toBe(200); expect(await page.text()).toContain('Fixture connector');
+    // Real host key shape: ui_locales is presentation only, stripped from the form.
+    const localized = new URL(auth); localized.searchParams.set('ui_locales', 'en-US fr');
+    const localizedPage = await send(localized.toString()); expect(localizedPage.status).toBe(200);
+    const localizedHtml = await localizedPage.text(); expect(localizedHtml).toContain('Fixture connector'); expect(localizedHtml).not.toContain('ui_locales');
+    for (const value of ['', 'en_US', ' en', 'en ', 'en  fr', 'en\tfr', '<script>', 'a'.repeat(257), Array(9).fill('en').join(' '), 'en-abcdefghi']) {
+      const malformed = new URL(auth); malformed.searchParams.set('ui_locales', value);
+      const deniedHint = await send(malformed.toString()); expect(deniedHint.status).toBe(403); expect(deniedHint.headers.get('Location')).toBeNull();
+    }
+    for (const key of [...auth.searchParams.keys(), 'ui_locales']) {
+      const duplicate = new URL(localized); duplicate.searchParams.append(key, duplicate.searchParams.get(key)!);
+      expect((await send(duplicate.toString())).status).toBe(403);
+    }
+    const unknownHint = new URL(localized); unknownHint.searchParams.set('unreviewed_hint', 'en'); expect((await send(unknownHint.toString())).status).toBe(403);
     const post = (decision: string, nonce: string, url = auth.toString(), origin = h.env.ACCOUNT_ISSUER) => send(h.env.ACCOUNT_ISSUER + '/authorize', { method: 'POST', headers: { Origin: origin }, body: new URLSearchParams({ csrf: nonce, decision, authorizationUrl: url }).toString() });
     const first = csrf, denied = await post('deny', first); expect(denied.status).toBe(303); expect(new URL(denied.headers.get('Location')!).searchParams.get('error')).toBe('access_denied');
     expect((await post('approve', first)).status).toBe(403);
     const approved = await post('approve', csrf); expect(approved.status).toBe(303); expect(new URL(approved.headers.get('Location')!).searchParams.has('code')).toBe(true);
     expect((await post('approve', csrf, auth.toString(), 'https://evil.invalid')).status).toBe(403);
-    for (const [key, value] of [['client_id', 'unknown'], ['resource', 'https://wrong.invalid'], ['redirect_uri', 'https://evil.invalid/callback']]) { const bad = new URL(auth); bad.searchParams.set(key, value); expect((await send(bad.toString())).status).toBe(403); }
+    for (const [key, value] of [['client_id', 'unknown'], ['resource', 'https://wrong.invalid'], ['redirect_uri', 'https://evil.invalid/callback'], ['scope', 'repository:write']]) { const bad = new URL(localized); bad.searchParams.set(key, value); expect((await send(bad.toString())).status).toBe(403); }
     mismatchedIdentity = true; expect((await post('approve', csrf)).status).toBe(403); mismatchedIdentity = false;
     expect((await accountWorker.fetch(h.request('/disconnect'), h.env)).status).toBe(200);
     expect((await post('approve', csrf)).status).toBe(403); // Revoked after the consent page cannot grant access.

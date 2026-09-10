@@ -19,6 +19,16 @@ npx wrangler deploy --dry-run --config account/wrangler.jsonc
 
 ## Central-account contract
 
+`/authorize` accepts optional `ui_locales` as a non-authority presentation hint.
+It must occur once, contain at most 256 ASCII language-tag characters and spaces,
+and list one to eight structurally valid language tags separated by single spaces
+(validated with `Intl.getCanonicalLocales`). Empty, malformed, oversized and
+duplicate values deny, as do duplicate authority parameters and unknown keys.
+The hint is discarded before OAuth parsing, rendered authorization forms and
+continuation storage: it does not choose an identity, change permissions or
+promise translated UI. Existing registered-client, exact callback/resource,
+`repository:read`, state and S256 checks remain unchanged.
+
 No deployed central-account identity issuer is established by this source. The approved account-owned identity authority described below supplies a verified account assertion or `__Host-account_assertion` secure HttpOnly SameSite=Lax cookie, signed ES256 by the configured account issuer. It must contain `sub`, numeric `github_id`, exact `service` and `resource`, positive `grant_generation`, single exact audience, and `iat`/`exp` no more than five minutes apart. Initial account generation is 1. Identity linking by email or mutable login is forbidden. The account-owned browser routes below establish numeric identity and bounded sessions; existing service assertion validation remains unchanged.
 
 The public browser calls CSRF-checked POST `/account/repositories/connect`. Raw public `/oauth/start` and cookie-less `/oauth/callback` are denied even with a valid connector/account assertion. The browser wrapper alone supplies trusted browser context to the binding-only broker OAuth methods. Those methods use maintained-library state/S256, exact callback, numeric identity and exact scope/expiry evidence. Identity bootstrap is separately `/account/signin` → `/account/callback`; it does not call the old already-authenticated identity broker seam. A single pending broker transaction per subject bounds retained state; expired state cannot be exchanged.

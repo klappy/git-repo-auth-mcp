@@ -9,10 +9,13 @@
 #   resolve-preview compute the auto-deployed branch preview URL, poll until live
 #   smoke           run test/smoke.live.test.ts against the preview
 #
-# Cloudflare Git integration auto-deploys every branch to
+# Legacy Cloudflare previews deploy eligible branches to
 #   https://<slug>-git-repo-auth-mcp.klappy.workers.dev
 # where <slug> is the branch lowercased with '/' and '.' replaced by '-'.
 # On push to main the slug is 'main'.
+# Isolated account-staging PRs run the same complete check job, but their
+# protected source branches have no legacy preview. Actual isolated deployment
+# and post-deploy acceptance are separately owned by the staging release flow.
 #
 # Token minting is deliberately NOT smoked here — see the header comment
 # in test/smoke.live.test.ts.
@@ -23,7 +26,7 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
+    branches: [main, dish/2026-09-07-native-staging-public]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -58,6 +61,7 @@ jobs:
 
   resolve-preview:
     name: Resolve preview URL
+    if: ${{ github.event_name != 'pull_request' || github.base_ref != 'dish/2026-09-07-native-staging-public' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     needs: check
