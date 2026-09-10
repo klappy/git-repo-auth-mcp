@@ -31,6 +31,21 @@ The README ships the supported input contract alongside the implementation.
 These tests are local/synthetic, not a claim of a successful live GitHub flow.
 Independent review, CI and Bugbot remain required before integration.
 
+## Isolated-source CI routing amendment
+
+The existing workflow selected only main pushes and PRs into main, so the
+isolated account-staging repair initially had no CI run. The same PR adds only
+the exact existing staging dish to the pull-request base filter. Its unchanged
+check job runs typecheck, the full default suite, the opt-in native host fixture
+and the account dry bundle. Main push/PR behavior is unchanged.
+
+Only PRs targeting this exact isolated dish skip legacy preview resolution;
+the dependent legacy smoke job consequently skips too. Those source branches
+are deliberately excluded from legacy deployment, so that preview cannot
+validate them. This does not waive isolated staging deployment/readback or
+post-deploy host acceptance: root retains those separate release obligations.
+The source fix and its tests are unchanged by this CI routing amendment.
+
 ## Scope and reversal
 
 No deployment configuration, activation flag, client, registration ledger,
