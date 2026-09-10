@@ -1,5 +1,6 @@
 import * as oauth from 'oauth4webapi';
 import { AccessDenied, positiveInteger, type SessionContext } from './session';
+import { IdentityRecoveryFailure, type RecoveryReference } from './recovery';
 
 export interface ProviderCredential {
   accessToken: string; refreshToken: string; expiresAt: number; refreshExpiresAt: number;
@@ -61,12 +62,17 @@ export class GitHubOAuth {
   async completeIdentity(url: URL, tx: IdentityTransaction): Promise<{ githubId: number }> {
     if (tx.kind !== 'identity-bootstrap' || tx.expiresAt <= Date.now() || tx.callback !== this.config.callback || url.origin + url.pathname !== tx.callback) throw new AccessDenied();
     const params = oauth.validateAuthResponse(server, this.client, url, tx.state);
-    const response = await oauth.authorizationCodeGrantRequest(server, this.client, oauth.ClientSecretPost(this.config.clientSecret), params, tx.callback, tx.verifier, { [oauth.customFetch]: this.config.fetch });
+    let reference: RecoveryReference = 'provider-exchange';
     let result: oauth.TokenEndpointResponse | undefined;
     try {
+      const response = await oauth.authorizationCodeGrantRequest(server, this.client, oauth.ClientSecretPost(this.config.clientSecret), params, tx.callback, tx.verifier, { [oauth.customFetch]: this.config.fetch });
+      reference = 'provider-response';
       result = await oauth.processAuthorizationCodeResponse(server, this.client, response);
+      reference = 'provider-identity';
       const scopes = validateScopes(result.scope, 'identity');
       return { githubId: await this.identity(result.access_token, scopes) };
+    } catch {
+      throw new IdentityRecoveryFailure(reference);
     } finally {
       result = undefined;
     }
