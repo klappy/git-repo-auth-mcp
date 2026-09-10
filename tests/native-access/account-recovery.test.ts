@@ -41,6 +41,60 @@ it('does not reflect an unknown recovery reference', () => {
   expect(recoveryNotice(secret as RecoveryReference)).toBe('');
 });
 
+it('actual DO preserves unknown-nonce transactions, burns state and continuation failures, and propagates only fixed references', async () => {
+  const output = await build({ stdin: { contents: `
+    export {AccountBrowserSessions} from './account/browser-session';
+    import {createAccountRoutes} from './account/account-routes';
+    let providerCalls=0;
+    const routes=createAccountRoutes({begin:async()=>{throw Error('unused')},complete:async()=>{providerCalls++;throw Error('unused')}});
+    export default {async fetch(r,e){
+      if(new URL(r.url).pathname==='/fixture/calls')return Response.json(providerCalls);
+      if(new URL(r.url).pathname.startsWith('/account'))return routes(r,e,async()=>new Response('',{status:403}));
+      return e.ACCOUNT_BROWSER_SESSIONS.get(e.ACCOUNT_BROWSER_SESSIONS.idFromName('account-authority-v2')).fetch(r);
+    }};
+  `, resolveDir: process.cwd(), loader: 'ts' }, bundle: true, write: false, format: 'esm', platform: 'browser', external: ['cloudflare:workers'] });
+  const mf = new Miniflare({ modules: true, script: output.outputFiles[0].text, compatibilityDate: '2026-06-16', host: '127.0.0.1', port: 0, cf: false, bindings: { BROWSER_SESSION_KEY_HEX: 'ab'.repeat(32), PRIVATE_ACTIVATION: 'owner-verified', ACCOUNT_ISSUER: 'https://account.example.test', ACCOUNT_LOGIN_CALLBACK: callback, RESOURCE: 'https://navigator.example.test/mcp' }, durableObjects: { ACCOUNT_BROWSER_SESSIONS: { className: 'AccountBrowserSessions', useSQLite: true } } });
+  const call = (value: unknown) => mf.dispatchFetch('https://account.example.test/fixture/do', { method: 'POST', body: JSON.stringify(value) });
+  try {
+    const handle = 'a'.repeat(64);
+    const start = async (continuationRef?: string) => {
+      const { nonce } = await (await call({ operation: 'begin', handle, continuationRef })).json() as { nonce: string };
+      const { transaction } = await productionLogin({ clientId: 'synthetic', clientSecret: secret, callback }).begin();
+      expect((await call({ operation: 'start', handle, nonce, transaction, continuationRef })).status).toBe(200);
+      return { nonce, state: transaction.state };
+    };
+    const first = await start();
+    const wrong = await call({ operation: 'consume', handle, nonce: secret, state: first.state });
+    expect(wrong.status).toBe(403); expect(await wrong.json()).toEqual({ error: 'access_denied', reference: 'callback-nonce' });
+    const intact = await call({ operation: 'consume', handle, ...first }); expect(intact.status).toBe(200);
+    await call({ operation: 'discard', proof: (await intact.json() as { proof: string }).proof });
+    const second = await start();
+    const badState = await call({ operation: 'consume', handle, nonce: second.nonce, state: secret });
+    expect(await badState.json()).toEqual({ error: 'access_denied', reference: 'callback-state-mismatch' });
+    expect(await (await call({ operation: 'consume', handle, ...second })).json()).toEqual({ error: 'access_denied', reference: 'callback-pending-missing' });
+    const created = await call({ operation: 'continuation-create', handle, intent: { clientId: 'synthetic', redirectUri: 'https://chatgpt.com/connector/oauth/synthetic', state: 'synthetic', responseType: 'code', codeChallenge: 'A'.repeat(43), codeChallengeMethod: 'S256', resource: 'https://navigator.example.test/mcp', scope: ['repository:read'] } });
+    expect(created.status).toBe(200); const { ref } = await created.json() as { ref: string }; expect(ref).toMatch(/^[a-f0-9]{64}$/); const third = await start(ref);
+    const page = await mf.dispatchFetch(callback + '?code=synthetic&state=' + third.state, { headers: { Cookie: '__Host-account_browser=' + handle + '; __Host-account_login=' + third.nonce } });
+    const html = await page.text(); expect(page.status).toBe(503); expect(html).toContain('<code>callback-continuation-cookie</code>'); expect(html).not.toContain(ref); expect(html).not.toContain(third.state); expect(html).not.toContain(third.nonce);
+    expect(await (await call({ operation: 'consume', handle, ...third, continuationRef: ref })).json()).toEqual({ error: 'access_denied', reference: 'callback-pending-missing' });
+    expect(await (await mf.dispatchFetch('https://account.example.test/fixture/calls')).json()).toBe(0);
+  } finally { await mf.dispose(); }
+});
+
+it.each(['provider-identity', secret, undefined])('rejects unknown or out-of-boundary internal consume reference %s', async reference => {
+  const env = { PRIVATE_ACTIVATION: 'owner-verified', ACCOUNT_ISSUER: 'https://account.example.test', ACCOUNT_LOGIN_CALLBACK: callback, ACCOUNT_BROWSER_SESSIONS: { idFromName: () => 'synthetic', get: () => ({ fetch: async () => Response.json({ error: 'access_denied', reference }, { status: 403 }) }) } } as unknown as AccountBrowserEnv;
+  const result = await createAccountRoutes()(new Request(callback + '?code=synthetic&state=synthetic', { headers: { Cookie: '__Host-account_browser=synthetic; __Host-account_login=synthetic' } }), env, async () => new Response('unused'));
+  const html = await result!.text(); expect(html).toContain('<code>callback-transaction</code>'); expect(html).not.toContain(secret);
+});
+
+it('classifies rejected provider callback validation without a token exchange or raw provider error', async () => {
+  let calls = 0;
+  const adapter = productionLogin({ clientId: 'synthetic', clientSecret: secret, callback, fetch: async () => { calls++; throw new Error(secret); } });
+  const { transaction } = await adapter.begin();
+  const error = await adapter.complete({ url: new URL(callback + '?error=access_denied&error_description=' + encodeURIComponent(secret) + '&state=' + transaction.state), transaction }).catch(e => e);
+  expect(error.reference).toBe('provider-validation'); expect(JSON.stringify(error)).not.toContain(secret); expect(calls).toBe(0);
+});
+
 it('real production login activates encrypted browser authority and reaches signed account bootstrap', async () => {
   const data = new Map<string, unknown>();
   const storage = {
@@ -140,6 +194,6 @@ it.each(['standalone', 'connector', 'connector-extra-signin-get'])('local worker
     expect(completed.headers.get('Location')).toBe(mode === 'standalone' ? '/account' : '/account/continue');
     const returned = await mf.dispatchFetch('https://account.example.test' + completed.headers.get('Location'), { headers: { Cookie: browserCookie + continuationCookie + '; ' + sessionCookie } }); expect(returned.status, await returned.clone().text()).toBe(200); expect(await returned.text()).toContain('Repository access is not connected.');
     const account = await mf.dispatchFetch('https://account.example.test/account', { headers: { Cookie: browserCookie + continuationCookie + '; ' + sessionCookie } }); expect(account.status).toBe(200); const html = await account.text(); expect(html).toContain('Repository access is not connected.'); expect(html).not.toContain('INERT_');
-    const replay = await mf.dispatchFetch(callbackUrl, { redirect: 'manual', headers: { Cookie: browserCookie + '; ' + loginCookie } }); expect(replay.status).toBe(503); expect(await replay.text()).toContain('<code>callback-transaction</code>');
+    const replay = await mf.dispatchFetch(callbackUrl, { redirect: 'manual', headers: { Cookie: browserCookie + '; ' + loginCookie } }); expect(replay.status).toBe(503); expect(await replay.text()).toContain('<code>callback-pending-missing</code>');
   } finally { await mf.dispose(); }
 }, 30_000);

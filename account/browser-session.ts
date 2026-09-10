@@ -1,6 +1,7 @@
 import { registrationEnabled, registrationLedger, registrationTarget } from './staging-registration';
 import { CompactEncrypt, compactDecrypt, decodeProtectedHeader } from 'jose';
 import { AccessDenied } from './session';
+import { IdentityRecoveryFailure, type ConsumeRecoveryReference } from './recovery';
 import { resolveIdentity, verifyIdentity, type AccountIdentity } from './identity-registry';
 import type { IdentityTransaction } from './oauth';
 import type { BrowserGrantProof } from './grants';
@@ -195,23 +196,33 @@ export class BrowserSessions {
     });
   }
   async consume(browser: string, nonce: string, state: string, continuationRef?: string) {
-    handleShape(browser); const key = 'pending:v2:' + await hash(browser);
+    try { handleShape(browser); } catch { throw new IdentityRecoveryFailure('callback-browser'); }
+    const key = 'pending:v2:' + await hash(browser);
     const result = await this.storage.transaction(async tx => {
-      const raw = await tx.get<string>(key); if (!raw) throw new AccessDenied(); const p = await this.open<Pending>(raw);
-      if (p.nonce !== nonce) throw new AccessDenied(); // Unknown browser nonce cannot cancel another flow.
+      const raw = await tx.get<string>(key); if (!raw) throw new IdentityRecoveryFailure('callback-pending-missing');
+      let p: Pending; try { p = await this.open<Pending>(raw); } catch { throw new IdentityRecoveryFailure('callback-pending-open'); }
+      if (p.nonce !== nonce) throw new IdentityRecoveryFailure('callback-nonce'); // Unknown browser nonce cannot cancel another flow.
       const stateHash = await hash(state), nonceHash = await hash(nonce);
       const known = (await tx.get<Ledger>('browser:v2:' + p.browser))?.stateBindings?.find(value => value.stateHash === stateHash);
-      if (known && (known.nonceHash !== nonceHash || known.continuationHash !== p.continuationHash || JSON.stringify(known.restart) !== JSON.stringify(p.restart))) throw new AccessDenied();
-      if (p.restart) { const ledger = await tx.get<Ledger>('browser:v2:' + p.browser); if (!ledger || ledger.pendingNonce !== nonce) throw new AccessDenied(); await this.checkRestart(tx, p.browser, p.restart, ledger); }
-      if (p.unbound) { const ledger = await tx.get<Ledger>('browser:v2:' + p.browser); if (!ledger || ledger.pendingNonce !== nonce) throw new AccessDenied(); await this.checkRestart(tx, p.browser, p.unbound, ledger); }
+      if (known && (known.nonceHash !== nonceHash || known.continuationHash !== p.continuationHash || JSON.stringify(known.restart) !== JSON.stringify(p.restart))) throw new IdentityRecoveryFailure('callback-binding');
+      try {
+        if (p.restart) { const ledger = await tx.get<Ledger>('browser:v2:' + p.browser); if (!ledger || ledger.pendingNonce !== nonce) throw new AccessDenied(); await this.checkRestart(tx, p.browser, p.restart, ledger); }
+        if (p.unbound) { const ledger = await tx.get<Ledger>('browser:v2:' + p.browser); if (!ledger || ledger.pendingNonce !== nonce) throw new AccessDenied(); await this.checkRestart(tx, p.browser, p.unbound, ledger); }
+      } catch { throw new IdentityRecoveryFailure('callback-restart'); }
       await tx.delete(key);
-      if (p.version !== 2 || p.expiresAt <= Date.now() || !p.transaction || p.transaction.state !== state || (await tx.get<Ledger>('browser:v2:' + p.browser))?.generation !== p.generation) return undefined;
-      if (p.continuationHash) { if (!continuationRef || await hash(continuationRef) !== p.continuationHash) return undefined; try { await this.continuation(tx, p.browser, p.continuationHash); } catch { return undefined; } } else if (continuationRef && !p.restart) return undefined;
+      // Return denials after deletion so the transaction commits its original one-use burn.
+      const denied = (reference: ConsumeRecoveryReference) => ({ reference });
+      if (p.version !== 2) return denied('callback-pending-version');
+      if (p.expiresAt <= Date.now()) return denied('callback-expired');
+      if (!p.transaction) return denied('callback-not-started');
+      if (p.transaction.state !== state) return denied('callback-state-mismatch');
+      if ((await tx.get<Ledger>('browser:v2:' + p.browser))?.generation !== p.generation) return denied('callback-generation');
+      if (p.continuationHash) { if (!continuationRef || await hash(continuationRef) !== p.continuationHash) return denied('callback-continuation-cookie'); try { await this.continuation(tx, p.browser, p.continuationHash); } catch { return denied('callback-continuation-unavailable'); } } else if (continuationRef && !p.restart) return denied('callback-continuation-unexpected');
       const proof = opaque(); const transaction = p.transaction; delete p.transaction;
       await tx.delete(key); await tx.put('activation:v2:' + await hash(proof), await this.seal(p));
       return { transaction, proof, continuation: Boolean(p.continuationHash), standalone: Boolean(p.restart) };
     });
-    if (!result) throw new AccessDenied(); return result;
+    if ('reference' in result) throw new IdentityRecoveryFailure(result.reference); return result;
   }
   async discard(proof: string) { handleShape(proof); await this.storage.delete('activation:v2:' + await hash(proof)); }
   async cancelRestart(browser: string, nonce: string, ref?: string) {
@@ -423,7 +434,10 @@ export class AccountBrowserSessions implements DurableObject {
       if (b.operation === 'entry') return Response.json(await store.entry(b.handle, b.activeHandle, b.continuationRef));
       if (b.operation === 'restart-cancel') return Response.json(await store.cancelRestart(b.handle, b.nonce, b.continuationRef));
       if (b.operation === 'start') return Response.json(await store.start(b.handle, b.nonce, b.transaction, b.continuationRef, b.restart === true));
-      if (b.operation === 'consume') return Response.json(await store.consume(b.handle, b.nonce, b.state, b.continuationRef));
+      if (b.operation === 'consume') {
+        try { return Response.json(await store.consume(b.handle, b.nonce, b.state, b.continuationRef)); }
+        catch (error) { if (error instanceof IdentityRecoveryFailure) return Response.json({ error: 'access_denied', reference: error.reference }, { status: 403 }); throw error; }
+      }
       if (b.operation === 'activate') return Response.json(await store.activate(b.githubId, b.proof));
       if (b.operation === 'discard') { await store.discard(b.proof); return Response.json({ discarded: true }); }
       if (b.operation === 'verify') return Response.json(await store.verify(b.identity));
