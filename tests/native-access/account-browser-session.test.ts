@@ -4,7 +4,7 @@ import { build } from 'esbuild';
 import { mkdtemp, rm, readdir, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { BrowserSessions } from '../../account/browser-session';
+import { BrowserSessions, type ContinuationIntent } from '../../account/browser-session';
 import { productionLogin } from '../../account/login';
 const startTransaction = async () => (await productionLogin({ clientId: 'fixture', clientSecret: 'INERT_CLIENT', callback: 'https://fixture.invalid/account/callback', fetch }).begin()).transaction;
 it('actual local DO atomically establishes numeric identity and token-free sessions, survives restart, and retires replay/inflight/replacement authority', async () => {
@@ -61,6 +61,30 @@ class Storage {
   async list<T>({ prefix, limit }: { prefix: string; limit: number }) { return new Map([...this.data].filter(([key]) => key.startsWith(prefix)).sort(([a], [b]) => a.localeCompare(b)).slice(0, limit)) as Map<string, T>; }
   async transaction<T>(fn: (tx: DurableObjectTransaction) => Promise<T>) { const before = new Map(this.data); try { return await fn(this as unknown as DurableObjectTransaction); } catch (e) { this.data = before; throw e; } }
 }
+it('re-reading a started sign-in preserves its exact lease, while replacement continuations still reject old callbacks', async () => {
+  const storage = new Storage(), sessions = new BrowserSessions(storage as unknown as DurableObjectStorage, new Uint8Array(32).fill(7)), handle = 'a'.repeat(64);
+  const intent: ContinuationIntent = { clientId: 'fixture', redirectUri: 'https://client.example.test/callback', state: 'fixture', responseType: 'code', codeChallenge: 'A'.repeat(43), codeChallengeMethod: 'S256', resource: 'https://navigator.example.test/mcp', scope: ['repository:read'] };
+  const c = await sessions.createContinuation(handle, intent), p = await sessions.begin(handle, undefined, c.ref), transaction = await startTransaction();
+  await sessions.start(handle, p.nonce, transaction, c.ref);
+  const before = JSON.stringify([...storage.data]);
+  const reread = await sessions.begin(handle, undefined, c.ref);
+  expect(reread).toEqual({ ...p, pending: true }); expect(JSON.stringify([...storage.data])).toBe(before);
+  await expect(sessions.start(handle, reread.nonce, await startTransaction(), c.ref)).rejects.toThrow();
+  const replacement = await sessions.createContinuation(handle, { ...intent, state: 'replacement' });
+  const next = await sessions.begin(handle, undefined, replacement.ref); expect(next.nonce).not.toBe(p.nonce); expect(next.pending).toBeUndefined();
+  const nextTransaction = await startTransaction(); await sessions.start(handle, next.nonce, nextTransaction, replacement.ref);
+  await expect(sessions.consume(handle, p.nonce, transaction.state, c.ref)).rejects.toThrow();
+  const proof = await sessions.consume(handle, next.nonce, nextTransaction.state, replacement.ref); expect((await sessions.activate(1001, proof.proof)).handle).toBeTruthy();
+});
+it('unstarted form replacement and post-consume replacement retain existing fail-closed semantics', async () => {
+  const storage = new Storage(), sessions = new BrowserSessions(storage as unknown as DurableObjectStorage, new Uint8Array(32).fill(7)), handle = 'b'.repeat(64);
+  const first = await sessions.begin(handle), replacement = await sessions.begin(handle); expect(replacement.nonce).not.toBe(first.nonce);
+  await expect(sessions.start(handle, first.nonce, await startTransaction())).rejects.toThrow();
+  const transaction = await startTransaction(); await sessions.start(handle, replacement.nonce, transaction);
+  const consumed = await sessions.consume(handle, replacement.nonce, transaction.state);
+  const newer = await sessions.begin(handle); expect(newer.pending).toBeUndefined(); expect(newer.nonce).not.toBe(replacement.nonce);
+  await expect(sessions.activate(1001, consumed.proof)).rejects.toThrow();
+});
 it('v2 idle/absolute/freshness boundaries, encrypted verifier and legacy rejection use deterministic clock', async () => {
   vi.useFakeTimers(); const clock = Date.now(), storage = new Storage(), sessions = new BrowserSessions(storage as unknown as DurableObjectStorage, new Uint8Array(32).fill(7)); const browser = 'a'.repeat(64);
   try {

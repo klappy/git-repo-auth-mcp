@@ -11,6 +11,10 @@ const cookie = (request: Request, name: string) => request.headers.get('Cookie')
 const setCookie = (name: string, value: string, age = 1800) => `${name}=${value}; Secure; HttpOnly; SameSite=Lax; Path=/; Max-Age=${age}`;
 function response(body: string, status = 200, extra: Record<string, string> = {}, registeredRedirectUri?: string) { return new Response(body, { status, headers: { ...browserHeaders(registeredRedirectUri), 'Content-Type': 'text/html; charset=utf-8', ...extra } }); }
 function continuationUnavailable(status: number) { return response(entryPage(), status); }
+function signinPending(nonce: string, browserHandle: string, ref?: string, restart = false) {
+  const cancel = restart || ref ? `<form method="post" action="${restart ? '/account/signin/restart/cancel' : '/account/continuation/cancel'}"><input type="hidden" name="csrf" value="${escape(nonce)}"><input type="hidden" name="continuation" value="${escape(ref ?? '')}">${restart ? '<input type="hidden" name="restart" value="standalone">' : ''}<button>Cancel sign-in</button></form>` : '';
+  return response(accountDocument('Sign-in in progress', '<h1>GitHub sign-in is already in progress</h1><p>Finish the GitHub sign-in you already started. Opening this page again has not started another sign-in. If you closed GitHub, this pending sign-in expires within five minutes.</p>' + cancel + '<p><a href="/account">Check account</a></p><p><a href="/account/public">Continue with public access</a></p>'), 200, { 'Set-Cookie': setCookie('__Host-account_browser', browserHandle, 28_800) });
+}
 async function internal(namespace: DurableObjectNamespace | undefined, name: string, value: unknown) {
   if (!namespace) throw new AccessDenied();
   const result = await namespace.get(namespace.idFromName(name)).fetch('https://internal.invalid/', { method: 'POST', body: JSON.stringify(value) });
@@ -63,12 +67,14 @@ export function createAccountRoutes(adapter?: LoginAdapter) {
         const restart = single(url.searchParams, 'restart'); if (restart && restart !== 'standalone') throw new AccessDenied();
         if (restart === 'standalone') {
           const handle = cookie(request, '__Host-account_browser') || (cookie(request, '__Host-account_session') ? '' : opaque()), continuationRef = continuationCookie(request);
-          const pending = await browser(env, { operation: 'begin', handle, activeHandle: cookie(request, '__Host-account_session') || undefined, continuationRef, restart: true }) as { nonce: string; browserHandle: string };
+          const pending = await browser(env, { operation: 'begin', handle, activeHandle: cookie(request, '__Host-account_session') || undefined, continuationRef, restart: true }) as { nonce: string; browserHandle: string; pending?: boolean };
+          if (pending.pending) return signinPending(pending.nonce, pending.browserHandle, continuationRef, true);
           return response(standalonePage(pending.nonce, continuationRef), 200, { 'Set-Cookie': setCookie('__Host-account_browser', pending.browserHandle, 28_800) });
         }
         const activeHandle = cookie(request, '__Host-account_session') || undefined;
         const handle = cookie(request, '__Host-account_browser') || (activeHandle ? '' : opaque()), continuationRef = continuationCookie(request);
-        const pending = await browser(env, { operation: 'begin', handle, activeHandle, continuationRef }) as { nonce: string; browserHandle: string };
+        const pending = await browser(env, { operation: 'begin', handle, activeHandle, continuationRef }) as { nonce: string; browserHandle: string; pending?: boolean };
+        if (pending.pending) return signinPending(pending.nonce, pending.browserHandle, continuationRef);
         return response(accountPage({ loginCsrf: pending.nonce, continuationRef }), 200, { 'Set-Cookie': setCookie('__Host-account_browser', pending.browserHandle, 28_800) });
       }
       if (path === '/account/callback') {
