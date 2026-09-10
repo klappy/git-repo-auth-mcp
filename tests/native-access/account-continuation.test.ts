@@ -123,6 +123,13 @@ it('native first setup preserves original client state/S256 through identity, ex
     const entryResponse = await send('/authorize?' + q); expect(entryResponse.status).toBe(303); expect(entryResponse.headers.get('Location')).toBe('/account/continue');
     expect((await send('/account/continue')).headers.get('Location')).toBe('/account/signin');
     const signin = await send('/account/signin'), loginForm = form(await signin.text()); expect(loginForm.get('continuation')).toMatch(/^[a-f0-9]{64}$/);
+    expect(signin.headers.get('Referrer-Policy')).toBe('same-origin');
+    // A browser using the former no-referrer policy sends Origin:null. Keep
+    // rejecting that request (and cross-site requests); fix the document policy.
+    for (const origin of ['null', 'https://evil.invalid']) {
+      const denied = await send('/account/signin', { method: 'POST', body: loginForm.toString(), headers: { Origin: origin } });
+      expect(denied.status).toBe(503); expect(denied.headers.get('Location')).toBeNull();
+    }
     const login = await send('/account/signin', { method: 'POST', body: loginForm.toString() }); expect(login.status).toBe(303); expect(calls).toEqual([]);
     const loginState = new URL(login.headers.get('Location')!).searchParams.get('state');
     const identity = await send('/account/callback?code=identity&state=' + loginState); expect(identity.status).toBe(303); expect(identity.headers.get('Location')).toBe('/account/continue');
