@@ -1,6 +1,12 @@
 export const registrationTarget=Object.freeze({issuer:'https://account-staging.klappy.dev',resource:'https://cartographer-staging.klappy.dev/mcp',objectName:'staging-client-registration-v1',limit:10});
-export type RegistrationEnv={ACCOUNT_ISSUER:string;RESOURCE:string;STAGING_CLIENT_REGISTRATION?:string;ACCOUNT_CONNECTOR_KV?:KVNamespace;ACCOUNT_BROWSER_SESSIONS?:DurableObjectNamespace};
-export function registrationEnabled(env:RegistrationEnv){return env.STAGING_CLIENT_REGISTRATION==='enabled'&&env.ACCOUNT_ISSUER===registrationTarget.issuer&&env.RESOURCE===registrationTarget.resource;}
+export type RegistrationEnv={ACCOUNT_ISSUER:string;RESOURCE:string;STAGING_CLIENT_REGISTRATION?:string;PRODUCTION_CLIENT_REGISTRATION?:string;ACCOUNT_CONNECTOR_KV?:KVNamespace;ACCOUNT_BROWSER_SESSIONS?:DurableObjectNamespace};
+export const productionRegistrationTarget=Object.freeze({issuer:'https://account.klappy.dev',resource:'https://cartographer.klappy.dev/mcp',objectName:'production-client-registration-v1',limit:10});
+export function selectedRegistrationTarget(env:RegistrationEnv){
+ if(env.STAGING_CLIENT_REGISTRATION==='enabled'&&env.ACCOUNT_ISSUER===registrationTarget.issuer&&env.RESOURCE===registrationTarget.resource)return registrationTarget;
+ if(env.PRODUCTION_CLIENT_REGISTRATION==='enabled'&&env.ACCOUNT_ISSUER===productionRegistrationTarget.issuer&&env.RESOURCE===productionRegistrationTarget.resource)return productionRegistrationTarget;
+ return undefined;
+}
+export function registrationEnabled(env:RegistrationEnv){return selectedRegistrationTarget(env)!==undefined;}
 const headers={'Cache-Control':'private, no-store','CDN-Cache-Control':'no-store','Cloudflare-CDN-Cache-Control':'no-store','Pragma':'no-cache','Content-Type':'application/json','X-Content-Type-Options':'nosniff'};
 const failure=(status:number,error:string)=>Response.json({error},{status,headers});
 export async function boundedMetadata(request:Request){
@@ -37,18 +43,20 @@ export async function registrationLedger(storage:DurableObjectStorage,value:{ope
 }
 export async function stagingRegistration(request:Request,env:RegistrationEnv,ctx:ExecutionContext):Promise<Response|null>{
  const url=new URL(request.url);if(url.pathname!=='/register')return null;
- if(!registrationEnabled(env)||url.origin!==registrationTarget.issuer||url.search||url.hash)return failure(404,'not_found');
+ const target=selectedRegistrationTarget(env);
+ if(!target||url.origin!==target.issuer||url.search||url.hash)return failure(404,'not_found');
  if(request.method!=='POST')return failure(405,'invalid_request');
  let metadata;try{metadata=await boundedMetadata(request);}catch{return failure(400,'invalid_client_metadata');}
  if(!env.ACCOUNT_CONNECTOR_KV||!env.ACCOUNT_BROWSER_SESSIONS)return failure(503,'temporarily_unavailable');
- const attempt=crypto.randomUUID(),stub=env.ACCOUNT_BROWSER_SESSIONS.get(env.ACCOUNT_BROWSER_SESSIONS.idFromName(registrationTarget.objectName));
+ const attempt=crypto.randomUUID(),stub=env.ACCOUNT_BROWSER_SESSIONS.get(env.ACCOUNT_BROWSER_SESSIONS.idFromName(target.objectName));
  const record=async(operation:string,clientId?:string)=>{const r=await stub.fetch('https://internal.invalid/',{method:'POST',body:JSON.stringify({operation,attempt,...(clientId?{clientId}:{})})});if(!r.ok)throw Error('registration_denied');return r.json() as Promise<{admitted?:boolean;recorded?:boolean}>;};
  try{
   if(!(await record('registration-admit')).admitted)return failure(429,'temporarily_unavailable');
   let puts=0;const kv={async put(key:string,value:string,options?:KVNamespacePutOptions){if(++puts!==1||!/^client:[A-Za-z0-9_-]{16,128}$/.test(key)||options&&Object.keys(options).length)throw Error('registration_denied');const id=key.slice(7);if(!(await record('registration-write-started',id)).recorded)throw Error('registration_denied');await env.ACCOUNT_CONNECTOR_KV!.put(key,value);if(!(await record('registration-written',id)).recorded)throw Error('registration_denied');}} as unknown as KVNamespace;
   const {default:OAuthProvider}=await import('@cloudflare/workers-oauth-provider');
-  const deny={fetch:async()=>failure(403,'access_denied')};const provider=new OAuthProvider({apiRoute:registrationTarget.resource,apiHandler:deny,defaultHandler:deny,authorizeEndpoint:registrationTarget.issuer+'/authorize',tokenEndpoint:registrationTarget.issuer+'/token',clientRegistrationEndpoint:registrationTarget.issuer+'/register',clientRegistrationTTL:undefined,clientIdMetadataDocumentEnabled:false,allowPlainPKCE:false,resourceMatchOriginOnly:false,scopesSupported:['repository:read']});
-  const response=await provider.fetch(new Request(registrationTarget.issuer+'/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(metadata)}),{OAUTH_KV:kv},ctx);
+  const deny={fetch:async()=>failure(403,'access_denied')};const provider=new OAuthProvider({apiRoute:target.resource,apiHandler:deny,defaultHandler:deny,authorizeEndpoint:target.issuer+'/authorize',tokenEndpoint:target.issuer+'/token',clientRegistrationEndpoint:target.issuer+'/register',clientRegistrationTTL:undefined,clientIdMetadataDocumentEnabled:false,allowPlainPKCE:false,resourceMatchOriginOnly:false,scopesSupported:['repository:read']});
+  const response=await provider.fetch(new Request(target.issuer+'/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(metadata)}),{OAUTH_KV:kv},ctx);
   for(const[k,v]of Object.entries(headers))response.headers.set(k,v);return response;
  }catch{return failure(503,'temporarily_unavailable');}
 }
+
