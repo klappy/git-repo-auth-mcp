@@ -45,4 +45,10 @@ describe('deployment topology', () => {
       expect(() => validateDeployment('staging', stagingPath, config, staging)).toThrow();
     }
   });
+  it.each(['enabled', undefined])('denies registration default %s', value => {
+    const config = read(stagingPath);
+    if (value === undefined) delete config.vars.STAGING_CLIENT_REGISTRATION;
+    else config.vars.STAGING_CLIENT_REGISTRATION = value;
+    expect(() => validateDeployment('staging', stagingPath, config, staging)).toThrow();
+  });
 });

@@ -18,6 +18,7 @@ export function validateDeployment(target, configPath, config, env) {
   assert.equal(config.main, expected.entry, 'wrong entrypoint');
   if (target === 'staging') {
     assert.equal(config.vars?.PRIVATE_ACTIVATION, 'disabled');
+    assert.equal(config.vars?.STAGING_CLIENT_REGISTRATION, 'disabled');
     assert.equal(config.workers_dev, false);
     assert.equal(config.preview_urls, false);
     assert.equal(config.observability?.enabled, false);

@@ -14,6 +14,7 @@
     "ACCOUNT_JWKS": "{\"keys\":[{\"kty\":\"EC\",\"crv\":\"P-256\",\"x\":\"EZXZZBTj8ryDQGa-jSLhbTtyogfr5VHe66tea7-A9FA\",\"y\":\"fZDetzynoGjNikQgZiiz62w4vqha8dVyPkcFaqfWgX8\",\"kid\":\"account-staging-v15-20260908-03\",\"alg\":\"ES256\",\"use\":\"sig\"}]}",
     "SERVICE_JWKS": "{\"keys\":[{\"kty\":\"EC\",\"crv\":\"P-256\",\"x\":\"Z9bDX-lgPvJOn0CS21rmIUjSzT9Jw5V2F0sJeEuXvzM\",\"y\":\"0TMr-pqpWG6rJKWQ9rbYYWwL-z1G_AappJEzfK-JZqA\",\"kid\":\"cartographer-staging-v15-20260908-04\",\"alg\":\"ES256\",\"use\":\"sig\"}]}",
     "PRIVATE_ACTIVATION": "disabled",
+    "STAGING_CLIENT_REGISTRATION": "disabled",
     "STAGING_METADATA_DISCOVERY": "enabled",
     "ACCOUNT_ISSUER": "https://account-staging.klappy.dev",
     "SERVICE_ISSUER": "https://cartographer-staging.klappy.dev",
