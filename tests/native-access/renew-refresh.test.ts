@@ -1,3 +1,4 @@
+import { decodeJwt } from 'jose';
 import { afterEach, expect, it, vi } from 'vitest';
 import { accountWorker, connectorSession } from '../../account/broker';
 import { DurableGrantStore, GrantVault } from '../../account/grants';
@@ -20,6 +21,9 @@ it('one connector exchange refreshes before signing and its first private read s
   const body = await renewed.json() as { assertion: string; generation: number };
   expect(await verifySession(body.assertion, h.service, h.a.policy)).toEqual({ ...context, generation: 2 });
   expect(body.generation).toBe(2);
+  expect(decodeJwt(body.assertion).provider_refreshed).toBe(true);
+  const again = await connectorSession(h.request('/connector/session'), h.env, context);
+  expect(decodeJwt((await again.json() as {assertion:string}).assertion).provider_refreshed).toBe(false);
   expect(provider).toHaveBeenCalledTimes(2); // One token exchange, one immutable identity check.
   const read = await accountWorker.fetch(h.request('/read', input, { Authorization: `Bearer ${body.assertion}` }), h.env);
   expect(read.status).toBe(200);

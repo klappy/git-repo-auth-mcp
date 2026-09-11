@@ -105,7 +105,7 @@ export class AccountGrantObject implements DurableObject {
         const jwk = JSON.parse(this.env.ACCOUNT_SIGNING_JWK);
         if (jwk.kty !== 'EC' || jwk.crv !== 'P-256' || !jwk.d || !jwk.kid) throw new AccessDenied();
         const key = await importJWK(jwk, 'ES256');
-        const assertion = await new SignJWT({ github_id: context.githubId, service: context.service, resource: context.resource, grant_generation: generation }).setProtectedHeader({ alg: 'ES256', kid: jwk.kid }).setIssuer(this.env.ACCOUNT_ISSUER).setAudience(this.env.BROKER_AUDIENCE).setSubject(context.subject).setIssuedAt().setExpirationTime('5m').setJti(crypto.randomUUID()).sign(key);
+        const assertion = await new SignJWT({ github_id: context.githubId, service: context.service, resource: context.resource, grant_generation: generation, provider_refreshed: generation !== authorizedGeneration }).setProtectedHeader({ alg: 'ES256', kid: jwk.kid }).setIssuer(this.env.ACCOUNT_ISSUER).setAudience(this.env.BROKER_AUDIENCE).setSubject(context.subject).setIssuedAt().setExpirationTime('5m').setJti(crypto.randomUUID()).sign(key);
         // Verify configured signing and verification ownership agree before returning an assertion.
         await verifyAccount(assertion, policy(this.env));
         await this.vault.current(generation);
