@@ -1,0 +1,5 @@
+import {it,expect} from 'vitest';
+import {credential,mockProvider,provider} from './helpers';
+it.each([{expires_in:undefined},{refresh_token:undefined},{refresh_token_expires_in:undefined},{scope:undefined},{scope:'read:user'},{scope:'repo admin:org'},{refresh_token:'INERT_REFRESH_1001'}])('rejects unsupported or expanded refresh response %j',async response=>{await expect(provider(mockProvider(response)).refresh(credential())).rejects.toThrow();});
+it('requires scopes reported by /user and same numeric identity after refresh',async()=>{await expect(provider(mockProvider({},1002)).refresh(credential())).rejects.toThrow();await expect(provider(mockProvider({},1001,'repo admin:org')).refresh(credential())).rejects.toThrow();});
+it('uses maintained refresh request with rotating expiring pair',async()=>{const fetcher=mockProvider(); const result=await provider(fetcher).refresh(credential());expect(result.refreshToken).toBe('INERT_NEW_REFRESH');expect(String(fetcher.mock.calls[0][1].body)).toContain('grant_type=refresh_token');expect(result.expiresAt).toBeGreaterThan(Date.now());});

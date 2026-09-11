@@ -1,0 +1,16 @@
+# Account sign-in recovery loop
+
+The user observed recovery → sign-in → recovery in iOS. Source inspection found that account documents sent `Referrer-Policy: no-referrer` while the sign-in POST correctly required the exact account origin. The Fetch standard's append-Origin algorithm serializes non-CORS POST Origin as `null` under that policy: https://fetch.spec.whatwg.org/#append-a-request-origin-header . Existing native synthetic request tests injected Origin and concealed this browser mismatch.
+
+This change uses same-origin referrer policy on account documents. It preserves strict Origin/CSRF guards and suppresses cross-origin Referer. Regression tests reject null/foreign Origin before the valid original nonce succeeds. The repository CI browser fixture submits actual forms under old/new policies and records cross-origin referrer and CSP redirect behavior, with every external destination intercepted and only inert fixture values.
+
+The Work browser could not reach the local fixture (`ERR_BLOCKED_BY_CLIENT`). No local browser bypass or live provider attempt was used. CI browser evidence must be read before merge; this document does not claim an observed iOS success or completed host connection. No cookies, credentials, DCR ledger, provider identity, deployment flags or production resources are altered by this source patch.
+
+Initial local targeted regression: 12 passed. Typecheck passed. Full suite result and remote CI/Bugbot acceptance are reported in the PR/checkpoint. If CSP blocks a legitimate redirected form in CI, repair it with independent review before considering this dish complete.
+
+
+CI run 34515076915, job 102998347913, reproduced the native browser failure at 18:35:10Z: old policy produced Origin:null and denial; repaired policy produced the exact local origin and acceptance; cross-origin Referer was absent. It also exposed a second blocker: the existing form-action self policy blocked the synthetic 303 provider redirect. That diagnostic green run was not accepted as completion.
+
+The follow-up allows the fixed GitHub origin on account documents and adds only the already-registered callback's serialized origin to the two consent-rendering paths. Backend Origin, CSRF, client registration, callback, state and S256 validation remain unchanged. Malformed origins, wildcards, credentials, opaque schemes and delimiter injection are rejected. CI now requires successful intercepted provider and callback form redirects and requires an unregistered destination to be blocked before any request. It never contacts live GitHub or ChatGPT.
+
+CI run 34515702594 exposed a harness limitation: Playwright's routing callback handles only the first URL in a redirected request. The synthetic client callback failed DNS; the preceding synthetic GitHub destination may have reached the real public origin. No credentials or live identity were present, but the earlier claim that every redirected request was intercepted was incorrect. The corrected harness uses only fixed local destination servers for provider and callback legs. It substitutes the fixed provider origin only in the test header, while source unit/route tests retain exact production-policy assertions. Routing remains defense in depth; destination isolation comes from entirely local URLs. Reference: https://playwright.dev/docs/api/class-page#page-route .
