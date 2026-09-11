@@ -1,0 +1,87 @@
+// SOURCE-ONLY PROPOSAL. DISABLED BOOTSTRAP: allocated production KV; client and public trust remain unbound.
+// Intended eventual path account/wrangler.production.jsonc; paths resolve there.
+// Secret bindings are intentionally absent; see BINDING-MATRIX.md.
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "native-account-broker-production-v1",
+  "main": "broker.ts",
+  "compatibility_date": "2026-09-07",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [
+    {
+      "pattern": "account.klappy.dev",
+      "custom_domain": true,
+      "zone_id": "d3fb39dede08497b44146266cc7c6d4e"
+    }
+  ],
+  "observability": {
+    "enabled": false,
+    "logs": {
+      "enabled": false,
+      "invocation_logs": false
+    },
+    "traces": {
+      "enabled": false
+    }
+  },
+  "vars": {
+    "GITHUB_CLIENT_ID": "UNBOUND_PRODUCTION_GITHUB_OAUTH_CLIENT_ID",
+    "BROWSER_SESSION_KEY_ID": "UNBOUND_PRODUCTION_BROWSER_KEY_ID",
+    "ACCOUNT_JWKS": "{\"keys\":[]}",
+    "SERVICE_JWKS": "{\"keys\":[]}",
+    "PRIVATE_ACTIVATION": "disabled",
+    "STAGING_CLIENT_REGISTRATION": "disabled",
+    "PRODUCTION_CLIENT_REGISTRATION": "disabled",
+    "STAGING_METADATA_DISCOVERY": "disabled",
+    "ACCOUNT_ISSUER": "https://account.klappy.dev",
+    "SERVICE_ISSUER": "https://cartographer.klappy.dev",
+    "BROKER_AUDIENCE": "https://account.klappy.dev/read",
+    "RESOURCE": "https://cartographer.klappy.dev/mcp",
+    "SERVICE": "cartographer",
+    "GITHUB_CALLBACK": "https://account.klappy.dev/oauth/callback",
+    "ACCOUNT_LOGIN_CALLBACK": "https://account.klappy.dev/account/callback"
+  },
+  "kv_namespaces": [
+    {
+      "binding": "ACCOUNT_CONNECTOR_KV",
+      "remote": false,
+      "id": "2e6b07e0a24c44418565aab36255139f"
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "ACCOUNT_GRANTS",
+        "class_name": "AccountGrantObject"
+      },
+      {
+        "name": "ACCOUNT_BROWSER_SESSIONS",
+        "class_name": "AccountBrowserSessions"
+      },
+      {
+        "name": "ACCOUNT_IDENTITY_REGISTRY",
+        "class_name": "AccountIdentityRegistry"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "account-v1",
+      "new_sqlite_classes": [
+        "AccountGrantObject"
+      ]
+    },
+    {
+      "tag": "account-browser-v1",
+      "new_sqlite_classes": [
+        "AccountBrowserSessions",
+        "AccountIdentityRegistry"
+      ]
+    }
+  ]
+}
+
