@@ -1,4 +1,4 @@
-import { registrationEnabled, registrationLedger, registrationTarget } from './staging-registration';
+import { registrationLedger, selectedRegistrationTarget } from './staging-registration';
 import { CompactEncrypt, compactDecrypt, decodeProtectedHeader } from 'jose';
 import { AccessDenied } from './session';
 import { IdentityRecoveryFailure, type ConsumeRecoveryReference } from './recovery';
@@ -368,7 +368,8 @@ export class AccountBrowserSessions implements DurableObject {
       const b = JSON.parse(text) as { operation: string; handle: string; activeHandle?: string; nonce: string; state: string; lease: string; transaction: IdentityTransaction; githubId: number; identity: AccountIdentity; consume?: boolean; proof: string; continuationRef?: string; restart?: boolean; ref: string; intent: ContinuationIntent; next: 'awaiting_repository' | 'ready_for_connector' };
       if (['registration-admit', 'registration-write-started', 'registration-written'].includes(b.operation)) {
         const env = this.env as BrowserEnv & AccountEnv;
-        if (!registrationEnabled(env) || !env.ACCOUNT_BROWSER_SESSIONS || !this.state.id.equals(env.ACCOUNT_BROWSER_SESSIONS.idFromName(registrationTarget.objectName))) throw new AccessDenied();
+        const target = selectedRegistrationTarget(env);
+        if (!target || !env.ACCOUNT_BROWSER_SESSIONS || !this.state.id.equals(env.ACCOUNT_BROWSER_SESSIONS.idFromName(target.objectName))) throw new AccessDenied();
         return Response.json(await registrationLedger(this.state.storage, JSON.parse(text)));
       }
       if (b.operation === 'repository-start-status') return Response.json(await store.repositoryStartStatus());
@@ -454,3 +455,4 @@ export class AccountBrowserSessions implements DurableObject {
     } catch { return Response.json({ error: 'access_denied' }, { status: 403 }); }
   }
 }
+
