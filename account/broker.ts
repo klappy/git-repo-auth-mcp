@@ -98,7 +98,10 @@ export class AccountGrantObject implements DurableObject {
         return Response.json({ generation: await this.vault.generation(context.githubId, context.generation) }, { headers: { 'Cache-Control': 'no-store' } });
       }
       if (url.pathname === '/session/renew' && request.method === 'POST') {
-        const generation = await this.vault.generation(context.githubId, context.generation);
+        const authorizedGeneration = await this.vault.generation(context.githubId, context.generation);
+        // Refresh within the verified consent lineage before signing. Otherwise the
+        // first read rotates the grant and correctly rejects this stale assertion.
+        const { generation } = await this.vault.credential(authorizedGeneration, context.githubId, oauth);
         const jwk = JSON.parse(this.env.ACCOUNT_SIGNING_JWK);
         if (jwk.kty !== 'EC' || jwk.crv !== 'P-256' || !jwk.d || !jwk.kid) throw new AccessDenied();
         const key = await importJWK(jwk, 'ES256');
