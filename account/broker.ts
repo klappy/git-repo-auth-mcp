@@ -41,6 +41,7 @@ export class AccountBroker {
 export interface AccountEnv {
   STAGING_METADATA_DISCOVERY?: string;
   STAGING_CLIENT_REGISTRATION?: string;
+  PRODUCTION_CLIENT_REGISTRATION?: string;
   ACCOUNT_IDENTITY_REGISTRY?: DurableObjectNamespace;
   ACCOUNT_BROWSER_SESSIONS?: DurableObjectNamespace;
   PRIVATE_ACTIVATION: string; ACCOUNT_GRANTS: DurableObjectNamespace;
