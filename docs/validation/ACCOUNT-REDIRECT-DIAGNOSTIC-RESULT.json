@@ -1,0 +1,13 @@
+{
+  "command": "node ../ACCOUNT-REDIRECT-DIAGNOSTIC.mjs",
+  "working_directory": "account-v15",
+  "evidence_scope": "Actual installed Miniflare redirect dispatch with local synthetic Worker and global MockAgent; not real GitHub or historical canceled invocation reconstruction",
+  "result": {
+    "defaultStatus": 200,
+    "defaultBody": "SYNTHETIC_REDIRECT_DESTINATION",
+    "manualStatus": 303,
+    "manualLocation": "https://github.com/login/oauth/authorize",
+    "mockGlobalHits": 1,
+    "unmockedExternalNetwork": "disabled"
+  }
+}

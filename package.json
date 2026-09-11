@@ -6,17 +6,22 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
-    "deploy": "node scripts/build-info.mjs && wrangler deploy && node scripts/provision-service-key.mjs",
+    "deploy": "npm run deploy:staging",
+    "deploy:staging": "node scripts/validate-deployment.mjs staging account/wrangler.staging.jsonc && wrangler deploy --config account/wrangler.staging.jsonc --experimental-autoconfig=false",
+    "deploy:production": "node scripts/validate-deployment.mjs production wrangler.jsonc && node scripts/build-info.mjs && wrangler deploy --config wrangler.jsonc --experimental-autoconfig=false && node scripts/provision-service-key.mjs",
     "typecheck": "tsc --noEmit",
     "build-info": "node scripts/build-info.mjs",
     "test": "vitest run",
-    "test:smoke": "vitest run test/smoke.live.test.ts"
+    "test:smoke": "vitest run test/smoke.live.test.ts",
+    "test:account-host": "RUN_ACCOUNT_HOST=1 vitest run tests/native-access/account-host.test.ts"
   },
   "dependencies": {
-    "@cloudflare/workers-oauth-provider": "^0.7.2",
+    "@cloudflare/workers-oauth-provider": "0.7.2",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@octokit/auth-app": "^8.2.0",
     "agents": "^0.15.0",
+    "jose": "6.2.3",
+    "oauth4webapi": "3.8.8",
     "zod": "^4.4.3"
   },
   "devDependencies": {
