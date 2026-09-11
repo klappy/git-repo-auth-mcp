@@ -1,7 +1,7 @@
 # Weekly live check vs production — pattern borrowed from
 # aquifer-mcp/.github/workflows/coverage-live.yml.
 #
-# PR-time smoke proves the branch preview; this proves prod is still
+# Source CI validates isolated builds; this checks legacy production remains
 # healthy between merges (secret rotation, KV drift, upstream GitHub
 # changes). On failure it opens a deduplicated issue.
 
@@ -23,6 +23,8 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: production
 
       - uses: actions/setup-node@v4
         with:

@@ -4,7 +4,7 @@
 // where Cloudflare injects CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID for
 // wrangler; we spend the same token on the secrets API.
 //
-// On every MAIN deploy:
+// On every PRODUCTION deploy:
 //   1. Generates a fresh 256-bit key (never printed, never stored on disk).
 //   2. PUTs it as secret ARS_SERVICE_KEY on this worker (git-repo-auth-mcp).
 //   3. PUTs it as secret GIT_REPO_AUTH_TOKEN on the `ars` worker.
@@ -13,7 +13,7 @@
 // workers — nowhere else.
 //
 // Fail-loud: a failed PUT fails the build visibly. Skips cleanly (exit 0)
-// when run locally (no CLOUDFLARE_API_TOKEN) or on non-main branches.
+// when run locally (no CLOUDFLARE_API_TOKEN) or on non-production branches.
 import { execSync } from "node:child_process";
 import crypto from "node:crypto";
 
@@ -32,8 +32,8 @@ if (!token || !account) {
   console.log("provision: no Cloudflare API credentials in env — skipping (local run).");
   process.exit(0);
 }
-if (branch !== "main") {
-  console.log(`provision: branch '${branch}' is not main — skipping rotation.`);
+if (branch !== "production") {
+  console.log(`provision: branch '${branch}' is not production — skipping rotation.`);
   process.exit(0);
 }
 

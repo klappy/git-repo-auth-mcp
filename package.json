@@ -6,7 +6,9 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
-    "deploy": "node scripts/build-info.mjs && wrangler deploy && node scripts/provision-service-key.mjs",
+    "deploy": "npm run deploy:staging",
+    "deploy:staging": "node scripts/validate-deployment.mjs staging account/wrangler.staging.jsonc && wrangler deploy --config account/wrangler.staging.jsonc --experimental-autoconfig=false --keep-vars",
+    "deploy:production": "node scripts/validate-deployment.mjs production wrangler.jsonc && node scripts/build-info.mjs && wrangler deploy --config wrangler.jsonc --experimental-autoconfig=false && node scripts/provision-service-key.mjs",
     "typecheck": "tsc --noEmit",
     "build-info": "node scripts/build-info.mjs",
     "test": "vitest run",

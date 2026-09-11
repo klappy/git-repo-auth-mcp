@@ -1,5 +1,7 @@
 # Isolated account broker
 
+Repository topology: feature PRs target `main` for staging; promotion PRs target `production`. `npm run deploy:staging` validates the main branch, isolated staging Worker and staging config before Wrangler. `npm run deploy:production` targets the existing legacy service with root config, not this broker. Committed staging private activation remains disabled; live activation is a separately reviewed operation. See [CONNECTED-BUILDS-CONTRACT.md](CONNECTED-BUILDS-CONTRACT.md) for deployment and acceptance obligations. Historical candidate validation statements below are source-stage records, not current deployment receipts.
+
 This additive Worker is a generic central-account OAuth/read broker. It does not run the existing installation-token MCP service and imports nothing from `src/`. The existing service's no-provider-token-storage and no-content-proxy promises do not describe this separate Worker: this broker keeps encrypted per-person GitHub OAuth credentials server-side and performs constrained repository reads itself.
 
 **Private activation is disabled.** The supplied Wrangler file has reserved synthetic URLs, no live client ID, signing key, vault key or connector namespace. No login, registration, grant, deployment or actual account linkage has been performed. A dry bundle is not a deployment.

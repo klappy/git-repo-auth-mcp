@@ -1,5 +1,7 @@
 # Exact staging metadata/public exposure contract
 
+Current topology proposal supersedes historical branch/command references below: main is staging, production is the promotion branch, and `scripts/validate-deployment.mjs` now enforces staging branch/Worker/config checks before deployment. The independent exact-SHA preflight and live post-deployment acceptance remain mandatory. See [CONNECTED-BUILDS-CONTRACT.md](CONNECTED-BUILDS-CONTRACT.md). This source change preserves both Wrangler configurations byte for byte and performs no live migration or activation.
+
 Root authorized preparing the previously approved staging hostnames without enabling private access. Otto accepted the exact phase design before local edits. Both remote branches remain frozen; this is a local candidate for independent review and subsequent root integration. No hostname, deployment or platform setting was mutated by the author.
 
 ## Exact source changes
