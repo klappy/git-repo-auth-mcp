@@ -22,6 +22,7 @@ import { setupOutcome } from "./install";
 import { createAppAuth } from "@octokit/auth-app";
 import { normalizePrivateKey } from "./keys";
 import { handleStripeWebhook, paymentLinkFor } from "./billing";
+import { isOperatorOwned } from "./stats";
 import type { Env } from "./types";
 
 const GH = "https://api.github.com";
@@ -42,6 +43,18 @@ function html(body: string, status = 200): Response {
   return new Response(
     `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Git Repo Auth MCP</title><style>body{font-family:ui-monospace,monospace;background:#FAFAF6;color:#16201B;max-width:560px;margin:64px auto;padding:0 20px;line-height:1.6}a{color:#0E5A4A}button{font:inherit;border:1.5px solid #16201B;background:#0E5A4A;color:#FAFAF6;padding:10px 18px;cursor:pointer}label{display:block;padding:10px;border:1.5px solid #D8D6CB;margin:8px 0;cursor:pointer}</style></head><body>${body}</body></html>`,
     { status, headers: { "content-type": "text/html; charset=utf-8" } }
+  );
+}
+
+/** Interim security lockdown (2026-09-05) refusal page — explicit, not a
+ *  silent 404. See CHANGELOG.md and docs/reviews/2026-09-05-klappy-only-lockdown.md. */
+function lockdownRefusal(login: string): Response {
+  return html(
+    `<h2>Access restricted</h2>
+     <p>This deployment is locked to its operator account during an interim security
+     review. Signed in as <b>${login}</b>, which is not an authorized login — no
+     installation was connected. See <a href="/security">/security</a> for details.</p>`,
+    403
   );
 }
 
@@ -85,6 +98,10 @@ async function completeFor(
   login: string,
   inst: Installation
 ): Promise<Response> {
+  // Last-line-of-defense gate: the only place that actually binds a grant to
+  // an installation, reached from /callback (single install), /select, and
+  // /setup alike. Interim lockdown (2026-09-05) — see lockdownRefusal.
+  if (!isOperatorOwned(env, login)) return lockdownRefusal(login);
   const { redirectTo } = await env.OAUTH_PROVIDER.completeAuthorization({
     request: oauthReqInfo,
     userId: login,
@@ -190,6 +207,11 @@ export const GitHubAuthHandler = {
         dest.searchParams.set("client_reference_id", user.login);
         return Response.redirect(dest.toString(), 302);
       }
+
+      // Interim lockdown (2026-09-05): refuse before listing installations at
+      // all, so a non-operator login never reaches install-app or the picker.
+      // completeFor() re-checks this — this is the early, user-visible half.
+      if (!isOperatorOwned(env, user.login)) return lockdownRefusal(user.login);
 
       const inst = await ghJson<{ total_count: number; installations: Installation[] }>(
         `${GH}/user/installations?per_page=100`,

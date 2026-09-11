@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Security
+
+- **Interim operator-only lockdown (2026-09-05).** New connections are refused for every GitHub login except the configured operator (`OPERATOR_LOGIN`) and any configured `TEST_LOGINS`: `/callback` refuses before listing installations, `completeFor` (the single function backing `/callback`'s one-installation path, `/select`, and `/setup`) refuses again as a last line of defense, and the `github_token` mint refuses non-operator logins outright — killing any already-bound outside grant immediately, with no KV migration needed. Refusals are explicit (403 / `isError` with a named reason), never a silent 404. Driven by an installation-escalation incident: one shared repository let an outside GitHub login bind the operator's whole App installation. This is an interim plug, not the fix — the ruled v1.0.0 user-token shape is the real remediation and is tracked separately. See `docs/reviews/2026-09-05-klappy-only-lockdown.md` and the incident ticket (`klappy/kitchen` rail item, 2026-09-01, gitauth installation escalation).
+
 ## v0.3.0 — Unreleased (Connectors Directory phases 1–2)
 
 ### Breaking
