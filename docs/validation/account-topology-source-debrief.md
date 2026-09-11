@@ -1,0 +1,9 @@
+# Account deployment topology source proposal
+
+Based on `5ac4b37178517fa4586e9a4e1127364266997846`. This proposal makes feature → main staging → production PR the explicit source build contract while retaining legacy production behavior. It adds a fail-closed branch/Worker/config guard, names deployment commands, updates CI to the staging bundle and both target branches, and removes misleading legacy preview URL assumptions.
+
+Both root and staging Wrangler configuration files are byte-for-byte unchanged. Staging does not run legacy build-info or provision-service-key. Production retains those helpers after its guard. This proposal creates no branch remotely, publishes no source, merges no PR, and changes no Cloudflare setting. Root owns the independently reviewed trigger migration and exact-commit pin. Native production activation is not part of this work.
+
+Local verification: TypeScript passed; Vitest passed 355 tests with 11 skipped; Wrangler 4.99.0 successfully dry-bundled `account/wrangler.staging.jsonc`. Thirteen deployment contract tests cover exact positive targets and negative branch metadata, connected Worker, swapped config, resource, route, entrypoint, activation and exposure cases. Local host persistence did not complete because the environment cancelled a network approval; no bypass or retry was attempted. The synthetic browser runtime is not installed locally. CI must complete both retained host/browser gates before merge, along with independent review and Bugbot.
+
+Learning: source CI must verify the configuration that is actually deployed. A generic reachable preview can validate another service or revision and cannot replace exact deployed-source attribution and live acceptance. Branch metadata is the connected-build value, not a requirement for an attached Git checkout; missing or HEAD metadata fails closed. The independent pinned SHA remains necessary because branch identity alone does not prove the checkout is reviewed.

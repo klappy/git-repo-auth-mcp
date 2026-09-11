@@ -1,5 +1,11 @@
 # Git Repo Auth MCP
 
+## Repository deployment branches
+
+Feature branches merge into `main`, the native account staging branch. Reviewed promotion is a PR from `main` into `production`. Staging uses `npm run deploy:staging`, `account/wrangler.staging.jsonc`, and Worker `native-account-broker-staging-v15`. Production uses `npm run deploy:production`, root `wrangler.jsonc`, and the existing legacy Worker `git-repo-auth-mcp`. The native account production template is not a live production configuration.
+
+Both commands reject mismatched connected-build branch and Worker metadata before Wrangler runs. `npm run deploy` aliases staging. Production alone retains legacy build-info and service-key provisioning. See [the build contract](account/CONNECTED-BUILDS-CONTRACT.md) for the separately gated control-plane migration, exact-commit pin, rollback, and live acceptance. Source changes alone do not migrate triggers or activate native production.
+
 **Your AI can build things. This lets it save them — safely.**
 
 When you ask an AI to build something, that work has to live somewhere. Developers keep theirs on GitHub — but GitHub expects you to create and manage digital keys, and that's where most people give up.
@@ -74,7 +80,7 @@ Your client will walk you through GitHub login and installation binding. Then as
    wrangler secret put GITHUB_CLIENT_ID
    wrangler secret put GITHUB_CLIENT_SECRET
    ```
-6. **Deploy:** `npm install && npm run deploy`
+6. **Deploy:** the operated production build uses `npm run deploy:production` from `production` with its matching connected Worker metadata. Self-hosters must separately review their own Worker/configuration and deployment contract; the committed guard intentionally targets the operated services.
 7. Keep any existing PAT until the first real token mints. Retiring the fallback before validating the replacement is how lockouts happen.
 
 Retired in v0.2: `MCP_AUTH_TOKEN` (replaced by per-user OAuth) and `GH_APP_INSTALLATION_ID` (now bound per grant).
