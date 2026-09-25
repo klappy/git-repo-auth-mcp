@@ -24,6 +24,7 @@ import { checkMint, recordLiveToken, refundMint, scopeKey } from "./quota";
 import { emitMeterEvent } from "./billing";
 import { getDocs, listDocs } from "./docs";
 import { computeStats, isOperator } from "./stats";
+import { docsResponse } from "./docs-response";
 import type { Env, GrantProps } from "./types";
 
 type AppAuth = ReturnType<typeof createAppAuth>;
@@ -44,7 +45,7 @@ function getAppAuth(env: Env): AppAuth {
   return appAuth;
 }
 
-function buildServer(env: Env, props: GrantProps, ctx: ExecutionContext): McpServer {
+export function buildServer(env: Env, props: GrantProps, ctx: ExecutionContext): McpServer {
   const server = new McpServer({ name: "git-repo-auth-mcp", version: "0.3.0" });
 
   server.registerTool(
@@ -204,11 +205,7 @@ function buildServer(env: Env, props: GrantProps, ctx: ExecutionContext): McpSer
       },
     },
     async ({ query }) => {
-      const docs = await getDocs(env, query);
-      const text = docs
-        .map((d) => `<!-- ${d.name} (source: ${d.source}) -->\n\n${d.text}`)
-        .join("\n\n---\n\n");
-      return { content: [{ type: "text" as const, text }] };
+      return docsResponse(await getDocs(env, query));
     }
   );
 
