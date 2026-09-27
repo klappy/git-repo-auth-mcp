@@ -18,6 +18,7 @@
     "STAGING_METADATA_DISCOVERY": "enabled",
     "ACCOUNT_ISSUER": "https://account-staging.klappy.dev",
     "SERVICE_ISSUER": "https://cartographer-staging.klappy.dev",
+    "SERVICE_JWKS_URI": "https://cartographer-staging.klappy.dev/.well-known/jwks.json",
     "BROKER_AUDIENCE": "https://account-staging.klappy.dev/read",
     "RESOURCE": "https://cartographer-staging.klappy.dev/mcp",
     "SERVICE": "cartographer",

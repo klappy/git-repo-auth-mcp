@@ -7,6 +7,7 @@ import { AccessDenied, bearer, verifyAccount, verifySession, type SessionContext
 import { GitHubOAuth } from './oauth';
 import { DurableGrantStore, GrantVault, type BrowserGrantProof } from './grants';
 import { GitHubReads, validateRead } from './upstream';
+import { serviceKeyResolver } from './service-jwks';
 
 export type ReadAction = 'resolve_repository' | 'resolve_ref' | 'read_tree' | 'read_archive' | 'read_blob';
 export interface BrokerReadRequest {
@@ -46,12 +47,12 @@ export interface AccountEnv {
   ACCOUNT_BROWSER_SESSIONS?: DurableObjectNamespace;
   PRIVATE_ACTIVATION: string; ACCOUNT_GRANTS: DurableObjectNamespace;
   ACCOUNT_ISSUER: string; SERVICE_ISSUER: string; BROKER_AUDIENCE: string; RESOURCE: string; SERVICE: string;
-  ACCOUNT_JWKS: string; SERVICE_JWKS: string; VAULT_KEY_HEX: string;
+  ACCOUNT_JWKS: string; SERVICE_JWKS: string; SERVICE_JWKS_URI?: string; VAULT_KEY_HEX: string;
   ACCOUNT_SIGNING_JWK: string; ACCOUNT_CONNECTOR_KV?: KVNamespace;
   GITHUB_CLIENT_ID: string; GITHUB_CLIENT_SECRET: string; GITHUB_CALLBACK: string;
 }
 function policy(env: AccountEnv): SessionPolicy {
-  return { accountIssuer: env.ACCOUNT_ISSUER, serviceIssuer: env.SERVICE_ISSUER, audience: env.BROKER_AUDIENCE, resource: env.RESOURCE, service: env.SERVICE, accountKey: createLocalJWKSet(JSON.parse(env.ACCOUNT_JWKS) as JSONWebKeySet), serviceKey: createLocalJWKSet(JSON.parse(env.SERVICE_JWKS) as JSONWebKeySet) };
+  return { accountIssuer: env.ACCOUNT_ISSUER, serviceIssuer: env.SERVICE_ISSUER, audience: env.BROKER_AUDIENCE, resource: env.RESOURCE, service: env.SERVICE, accountKey: createLocalJWKSet(JSON.parse(env.ACCOUNT_JWKS) as JSONWebKeySet), serviceKey: serviceKeyResolver(env) };
 }
 function errorResponse(error: unknown, requestId = crypto.randomUUID()): Response {
   // Never return provider errors, exception strings, owner names, paths, tokens or grant IDs.
