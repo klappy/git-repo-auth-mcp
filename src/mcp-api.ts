@@ -23,7 +23,9 @@ import { normalizePrivateKey } from "./keys";
 import { checkMint, recordLiveToken, refundMint, scopeKey } from "./quota";
 import { emitMeterEvent } from "./billing";
 import { getDocs, listDocs } from "./docs";
-import { gitPut } from "./git-put";
+import { gitPut, type GitPutDeps } from "./git-put";
+import { gitMove } from "./git-move";
+import { prOpen } from "./pr-open";
 import { computeStats, isOperator } from "./stats";
 import type { Env, GrantProps } from "./types";
 
@@ -185,6 +187,41 @@ function buildServer(env: Env, props: GrantProps, ctx: ExecutionContext): McpSer
     }
   );
 
+  // Shared server-side plumbing for the write verbs (git_put, git_move, pr_open).
+  const writeDeps = (): GitPutDeps => {
+    const auth = getAppAuth(env);
+    return {
+      owner: props.accountLabel,
+      login: props.login,
+      fetch: (...a) => fetch(...a),
+      log: (line) => console.log(line),
+      getGrant: async () => {
+        const app = await auth({ type: "app" });
+        const res = await fetch(`https://api.github.com/app/installations/${props.installationId}`, {
+          headers: { Authorization: `Bearer ${app.token}`, Accept: "application/vnd.github+json", "User-Agent": "git-repo-auth-mcp" },
+        });
+        const j = (await res.json()) as { permissions?: Record<string, string> };
+        return { permissions: j.permissions ?? {} };
+      },
+      mint: async (repo, permissions) => {
+        const scope = await scopeKey(props.installationId, [repo], permissions);
+        const decision = await checkMint(env, props.login, scope);
+        if (!decision.ok) throw Object.assign(new Error("quota_exceeded"), { status: 429 });
+        try {
+          const r = (await auth({ type: "installation", installationId: props.installationId, repositoryNames: [repo], permissions })) as InstallationAccessTokenAuthentication;
+          if (!decision.cached) {
+            ctx.waitUntil(recordLiveToken(env, props.login, scope, r.expiresAt));
+            ctx.waitUntil(emitMeterEvent(env, props.login));
+          }
+          return r.token;
+        } catch (err) {
+          if (decision.charge) ctx.waitUntil(refundMint(env, props.login, decision.charge));
+          throw err;
+        }
+      },
+    };
+  };
+
   server.registerTool(
     "git_put",
     {
@@ -206,37 +243,54 @@ function buildServer(env: Env, props: GrantProps, ctx: ExecutionContext): McpSer
       },
     },
     async (input) => {
-      const auth = getAppAuth(env);
-      const result = await gitPut(input, {
-        owner: props.accountLabel,
-        login: props.login,
-        fetch: (...a) => fetch(...a),
-        log: (line) => console.log(line),
-        getGrant: async () => {
-          const app = await auth({ type: "app" });
-          const res = await fetch(`https://api.github.com/app/installations/${props.installationId}`, {
-            headers: { Authorization: `Bearer ${app.token}`, Accept: "application/vnd.github+json", "User-Agent": "git-repo-auth-mcp" },
-          });
-          const j = (await res.json()) as { permissions?: Record<string, string> };
-          return { permissions: j.permissions ?? {} };
-        },
-        mint: async (repo, permissions) => {
-          const scope = await scopeKey(props.installationId, [repo], permissions);
-          const decision = await checkMint(env, props.login, scope);
-          if (!decision.ok) throw Object.assign(new Error("quota_exceeded"), { status: 429 });
-          try {
-            const r = (await auth({ type: "installation", installationId: props.installationId, repositoryNames: [repo], permissions })) as InstallationAccessTokenAuthentication;
-            if (!decision.cached) {
-              ctx.waitUntil(recordLiveToken(env, props.login, scope, r.expiresAt));
-              ctx.waitUntil(emitMeterEvent(env, props.login));
-            }
-            return r.token;
-          } catch (err) {
-            if (decision.charge) ctx.waitUntil(refundMint(env, props.login, decision.charge));
-            throw err;
-          }
-        },
-      });
+      const result = await gitPut(input, writeDeps());
+      return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }], ...(result.ok ? {} : { isError: true }) };
+    }
+  );
+
+  server.registerTool(
+    "git_move",
+    {
+      title: "Move a file or directory on a branch",
+      annotations: { title: "Move a file or directory on a branch", readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+      description:
+        `Move a path (file or directory) on a branch of a repo in the '${props.accountLabel}' installation as ONE ` +
+        `commit that drops 'from' and adds 'to', minting server-side. Same scope law as git_put: refuses before ` +
+        `minting if the grant lacks contents:write; default-branch moves only when both paths are under rail/ or journal/.`,
+      inputSchema: {
+        repo: z.string().describe('"owner/name" or bare repo name'),
+        branch: z.string(),
+        base: z.string().optional(),
+        from: z.string(),
+        to: z.string(),
+        message: z.string(),
+        author: z.object({ name: z.string(), email: z.string() }).optional(),
+      },
+    },
+    async (input) => {
+      const result = await gitMove(input, writeDeps());
+      return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }], ...(result.ok ? {} : { isError: true }) };
+    }
+  );
+
+  server.registerTool(
+    "pr_open",
+    {
+      title: "Open a draft pull request",
+      annotations: { title: "Open a draft pull request", readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+      description:
+        `Open a DRAFT pull request in a repo of the '${props.accountLabel}' installation, assigned to you, minting ` +
+        `server-side. Never requests review. Refuses before minting if the grant lacks pull_requests:write.`,
+      inputSchema: {
+        repo: z.string().describe('"owner/name" or bare repo name'),
+        head: z.string(),
+        base: z.string().optional(),
+        title: z.string(),
+        body: z.string().optional(),
+      },
+    },
+    async (input) => {
+      const result = await prOpen(input, writeDeps());
       return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }], ...(result.ok ? {} : { isError: true }) };
     }
   );
