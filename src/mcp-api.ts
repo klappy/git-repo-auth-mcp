@@ -23,6 +23,7 @@ import { normalizePrivateKey } from "./keys";
 import { checkMint, recordLiveToken, refundMint, scopeKey } from "./quota";
 import { emitMeterEvent } from "./billing";
 import { getDocs, listDocs } from "./docs";
+import { gitPut } from "./git-put";
 import { computeStats, isOperator } from "./stats";
 import type { Env, GrantProps } from "./types";
 
@@ -181,6 +182,62 @@ function buildServer(env: Env, props: GrantProps, ctx: ExecutionContext): McpSer
         },
       };
       return { content: [{ type: "text" as const, text: JSON.stringify(payload, null, 2) }] };
+    }
+  );
+
+  server.registerTool(
+    "git_put",
+    {
+      title: "Put files on a branch",
+      annotations: { title: "Put files on a branch", readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+      description:
+        `Write file(s) to a branch of a repo in the '${props.accountLabel}' installation as ONE commit, ` +
+        `minting server-side — no token ever reaches you. Creates the branch from 'base' (default: the ` +
+        `repo's default branch) if absent. Default-branch writes are refused unless every path is under ` +
+        `rail/ or journal/. Refuses before minting, naming the missing permission, if the installation ` +
+        `grant is narrower than contents:write. Returns commit sha + blob urls. Ask docs about "write verbs".`,
+      inputSchema: {
+        repo: z.string().describe('"owner/name" or bare repo name'),
+        branch: z.string(),
+        base: z.string().optional(),
+        files: z.array(z.object({ path: z.string(), content: z.string(), mode: z.enum(["100644", "100755"]).optional() })).min(1),
+        message: z.string(),
+        author: z.object({ name: z.string(), email: z.string() }).optional(),
+      },
+    },
+    async (input) => {
+      const auth = getAppAuth(env);
+      const result = await gitPut(input, {
+        owner: props.accountLabel,
+        login: props.login,
+        fetch: (...a) => fetch(...a),
+        log: (line) => console.log(line),
+        getGrant: async () => {
+          const app = await auth({ type: "app" });
+          const res = await fetch(`https://api.github.com/app/installations/${props.installationId}`, {
+            headers: { Authorization: `Bearer ${app.token}`, Accept: "application/vnd.github+json", "User-Agent": "git-repo-auth-mcp" },
+          });
+          const j = (await res.json()) as { permissions?: Record<string, string> };
+          return { permissions: j.permissions ?? {} };
+        },
+        mint: async (repo, permissions) => {
+          const scope = await scopeKey(props.installationId, [repo], permissions);
+          const decision = await checkMint(env, props.login, scope);
+          if (!decision.ok) throw Object.assign(new Error("quota_exceeded"), { status: 429 });
+          try {
+            const r = (await auth({ type: "installation", installationId: props.installationId, repositoryNames: [repo], permissions })) as InstallationAccessTokenAuthentication;
+            if (!decision.cached) {
+              ctx.waitUntil(recordLiveToken(env, props.login, scope, r.expiresAt));
+              ctx.waitUntil(emitMeterEvent(env, props.login));
+            }
+            return r.token;
+          } catch (err) {
+            if (decision.charge) ctx.waitUntil(refundMint(env, props.login, decision.charge));
+            throw err;
+          }
+        },
+      });
+      return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }], ...(result.ok ? {} : { isError: true }) };
     }
   );
 
