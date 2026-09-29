@@ -18,6 +18,10 @@
     "OPERATOR_LOGIN": "klappy",
     // Metering ships observe-only; flip to "true" to enforce quotas.
     "QUOTA_ENFORCE": "false",
+    // Exact resources whose /token access_token is a read-only ghs_ (src/index.ts).
+    // STAGING Cartographer only (kitchen ASK option 3); the prod resource
+    // https://cartographer.klappy.dev/mcp is added only on the captain's flip.
+    "GHS_ACCESS_TOKEN_RESOURCES": "https://cartographer-staging.klappy.dev/mcp",
     // Stripe price id -> tier id (live mode, Covenynt Ventures LLC)
     "STRIPE_PRICE_MAP": "{\"price_1TgrOHPHZ1kOt0d4ROZOt0rZ\":\"solo\",\"price_1TgrONPHZ1kOt0d4XvuAPXsh\":\"pro\",\"price_1TgrOUPHZ1kOt0d4ki14AGCo\":\"team\",\"price_1TgrOcPHZ1kOt0d4CtxsK6QA\":\"fleet\"}",
     // Where the quota wall sends people
