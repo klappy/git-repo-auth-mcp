@@ -23,6 +23,11 @@ export interface Env {
    *  per-tenant credentials (multitenancy policy §13). */
   ARS_SERVICE_ACCOUNT?: string;
 
+  /** Comma-separated exact resource URIs (RFC 8707) whose POST /token
+   *  access_token is a fresh read-only GitHub installation token instead of
+   *  the provider's opaque token. Unset/empty = off (src/index.ts). */
+  GHS_ACCESS_TOKEN_RESOURCES?: string;
+
   /** Provider state: hashed OAuth grants + transient pending records. */
   OAUTH_KV: KVNamespace;
   /** Injected by OAuthProvider on the default handler. */
