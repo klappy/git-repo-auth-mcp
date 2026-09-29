@@ -1,5 +1,11 @@
 # Git Repo Auth MCP
 
+> **v1.0.0 coming — breaking.** This README describes **v0.3.0**, which stays live until v1.0.0
+> deploys. v1 mints *user access tokens* (your reach, the App as the ceiling), removes the
+> installation picker and the `permissions` parameter, and takes one `repository_id` per mint.
+> Declared registration: [`app-manifest.json`](app-manifest.json). Details: [`CHANGELOG.md`](CHANGELOG.md).
+> Superseded statements below are kept and marked (dated 2026-09-27).
+
 ## Repository deployment branches
 
 Feature branches merge into `main`, the native account staging branch. Reviewed promotion is a PR from `main` into `production`. Staging uses `npm run deploy:staging`, `account/wrangler.staging.jsonc`, and Worker `native-account-broker-staging-v15`. Production uses `npm run deploy:production`, root `wrangler.jsonc`, and the existing legacy Worker `git-repo-auth-mcp`. The native account production template is not a live production configuration.
@@ -41,6 +47,12 @@ A Cloudflare Worker that bridges MCP's OAuth to GitHub App installation tokens. 
 3. Zero installations → the user is sent to install the app on their repos. One → bound automatically. Several → a picker.
 4. The grant is bound to that installation ID. Every later `github_token` call mints for that installation only. **GitHub enforces the walls**: a token minted for one installation physically cannot touch another's repositories.
 
+> **Superseded 2026-09-27.** The "walls" sentence above was false for one path: a user who could see
+> another account's installation in step 3's picker could bind to it and mint for that account's
+> repositories (installation-binding escalation, found 2026-09-01, 0 tenants exposed). v1.0.0 removes
+> the picker; tokens become user access tokens bounded by the user's own access ∩ the App registration.
+> See `CHANGELOG.md` § v1.0.0 Security.
+
 ## Security model — read before trusting
 
 **What is never stored.** No GitHub tokens, ever. Installation tokens are minted on demand and die within the hour. The GitHub user token from login is used for two GET requests and discarded. The worker's state is: its own OAuth grants (hashed, in KV) and 10-minute pending records during account selection.
@@ -49,7 +61,7 @@ A Cloudflare Worker that bridges MCP's OAuth to GitHub App installation tokens. 
 
 **Blast radius, honestly.** If this worker is compromised, the attacker gains minting capability over the repos of *every account that installed the app* — not their keys, not their accounts, but their installed scope, within the app's permission ceiling. Your kill switch as a user is first-class and unilateral: **uninstall the app**, and minting for your account ends instantly; outstanding tokens die within the hour. If that trust trade doesn't fit you, self-host your own instance (below) — it's the same code.
 
-**"No Administration" ≠ "cannot escalate."** The recommended grant (Contents RW, PRs RW, Workflows RW, Metadata R) excludes Administration. But Workflows write means a token holder can modify CI, and CI runs with the repo's own credentials. The path is accepted, not eliminated: CI changes land in PRs and audit logs under the app's `[bot]` identity. Users who don't want the trade can simply not grant the app repos where it matters — or the operator can drop the Workflows permission app-wide.
+**"No Administration" ≠ "cannot escalate."** The recommended grant (Contents RW, PRs RW, Workflows RW, Metadata R) excludes Administration. *(Superseded 2026-09-27: on 2026-09-01 the actual registration granted Administration and 100+ write permissions — the sentence described the intent, not GitHub. The declared registration is now `app-manifest.json`: Contents RW, Pull requests RW, Metadata R, nothing else; Workflows is not granted. Registration truth is `GET https://api.github.com/apps/git-repo-auth`.)* But Workflows write means a token holder can modify CI, and CI runs with the repo's own credentials. The path is accepted, not eliminated: CI changes land in PRs and audit logs under the app's `[bot]` identity. Users who don't want the trade can simply not grant the app repos where it matters — or the operator can drop the Workflows permission app-wide.
 
 **Per-request enforcement.** The permission ceiling, repository scoping, one-hour expiry, and bot provenance are all enforced by GitHub, not by this code.
 

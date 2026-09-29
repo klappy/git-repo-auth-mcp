@@ -1,6 +1,47 @@
 # Changelog
 
-## v0.3.0 — Unreleased (Connectors Directory phases 1–2)
+## v1.0.0 — Coming (Breaking: user access tokens, App as the ceiling)
+
+> Superseded 2026-09-27 (spec dish `2026-09-01-gitauth-v1-user-tokens-spec`, shape 🅰 ruled 2026-09-01).
+> v0.3.0 below stays live until v1.0.0 deploys. Not backwards compatible. Version number 1.0.0 vs 2.0.0:
+> captain ruling pending; this entry renames if ruled otherwise.
+
+### Breaking
+
+- **Tokens are user access tokens, not installation tokens.** `github_token` mints a GitHub App
+  *user-to-server* token (`ghu_`) on behalf of the logged-in user. Its reach is the **intersection** of
+  what that user can already do and what the App registration allows — the App is the ceiling, the
+  user is the floor. A token is exactly your reach, never another account's.
+- **Installation picker removed.** `/callback` no longer binds a grant to an installation ID. The
+  binding that let a collaborator pick another account's installation (see Security) is gone by
+  construction.
+- **`permissions` parameter removed** from `github_token`. Permissions come from the registration
+  (`app-manifest.json`) and the user's own access; there is nothing to ask for.
+- **`repositories[]` → `repository_id`.** One named repository per mint. "Read then write = two mints"
+  is retired: one mint per repo.
+- **Existing grants force-reconnect.** Every v0.x OAuth grant is invalidated at deploy; users
+  reconnect once. The v0.3.0 statement "No GitHub tokens, ever" is superseded: v1 stores **one
+  encrypted refresh token per user**, revocable at github.com; access tokens are never stored.
+- **ARS machine-credential path is the only installation-token caller** (`docs/machine-credential-path.md`).
+
+### Security
+
+- **Installation-binding escalation.** Found 2026-09-01 by the operator; 0 tenants exposed. In
+  v0.2–v0.3 a user who could log in and see another account's installation of this App could bind a
+  grant to it and mint tokens for that account's selected repositories. The public claim "a minted
+  token physically cannot reach another account's repositories" (README, `public/under-the-hood.html`)
+  was false for that path. v1 removes the picker; until then no second account onboards.
+  `[captain wording pending — ticket "security-note wording ruling"]`
+- **Registration over-grant.** On 2026-09-01 the public registration (`GET /apps/git-repo-auth`)
+  showed 100+ permissions at write, including Administration — contradicting README "excludes
+  Administration". The declared registration is now `app-manifest.json` (Contents RW, Pull requests RW,
+  Metadata R; `github_app_authorization` event; user-token expiration on). A CI drift check against
+  the public endpoint is owed (spec slice S6).
+
+## v0.3.0 — Live (Connectors Directory phases 1–2)
+
+> Closed 2026-09-27: this is what is deployed at gitauth.klappy.dev today. Superseded by v1.0.0 above
+> when it lands; text retained (R14).
 
 ### Breaking
 
