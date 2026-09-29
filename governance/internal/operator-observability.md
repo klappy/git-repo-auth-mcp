@@ -53,6 +53,15 @@ An operator-only MCP tool, `admin_stats`:
 - Returns **aggregate counts only** — connected, active, paid, and the crude ratio. No logins, no per-user rows, nothing reversible.
 - The tool description names this document, so the capability is self-discoverable by any agent connected as the operator.
 
+## Tool token footer (docs tool)
+
+Canon draft `klappy://canon/constraints/tool-token-footer`: every content-producing tool response carries `tokens: {source, returned, ratio, tokenizer}`, computed at the tool's door. In this service only `docs` produces content — `github_token` mints credentials and `admin_stats` returns aggregates — so only `docs` carries it, as `_meta.tokens` on the tools/call result (never in the content text; same placement as cartographer).
+
+- `source` — cl100k_base tokens of the whole governance documents chosen for the answer (up to two).
+- `returned` — cl100k_base tokens of the content block actually sent (documents plus a one-line header each and separators), so the ratio sits just above 1.
+- `ratio` — returned/source, 4 decimals; null when source is 0.
+- Telemetry count: one Workers Logs event per call, `{"event":"tool_tokens","tool":"docs","tokens_source":…,"tokens_returned":…,"ratio":…,"tokenizer":"cl100k_base"}`. Numbers and tool name only — no query, no document text, no login. This service has no Analytics Engine dataset; the log event is the metered count until one is bound.
+
 ## Privacy posture
 
 This adds **no stored data**. Counts are computed at request time from records the privacy policy already enumerates. Aggregates leave the worker; identities do not. Therefore no privacy-policy amendment is required. If per-user funnel events are ever added, that is a separate decision requiring a policy amendment with a new effective date.

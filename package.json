@@ -22,6 +22,7 @@
     "@octokit/auth-app": "^8.2.0",
     "agents": "^0.15.0",
     "jose": "6.2.3",
+    "js-tiktoken": "^1.0.21",
     "oauth4webapi": "3.8.8",
     "zod": "^4.4.3"
   },
