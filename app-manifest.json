@@ -1,0 +1,21 @@
+{
+  "$comment": "Declared registration for the GitHub App git-repo-auth. Compare against public GET https://api.github.com/apps/git-repo-auth. Anything on GitHub not listed here is drift.",
+  "slug": "git-repo-auth",
+  "owner": "klappy",
+  "permissions": {
+    "contents": "write",
+    "pull_requests": "write",
+    "metadata": "read"
+  },
+  "events": ["github_app_authorization"],
+  "optional_features": {
+    "user_to_server_token_expiration": true
+  },
+  "urls": {
+    "callback": "https://gitauth.klappy.dev/callback",
+    "setup": "https://gitauth.klappy.dev/setup",
+    "webhook": "https://gitauth.klappy.dev/webhook"
+  },
+  "declared": "2026-09-01",
+  "ruling": "rail/2-cooking/2026-09-01-gitauth-installation-escalation (shape A)"
+}

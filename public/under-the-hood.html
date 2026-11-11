@@ -223,8 +223,10 @@ footer a{color:var(--viridian)}
   .bar nav a:not(.btn){display:none}
 }
 </style>
+<style>.v1-banner{background:#3b2f00;color:#ffe08a;padding:.6rem 1rem;font-size:.95rem;text-align:center}.v1-banner a{color:inherit}.superseded{border-left:3px solid #e0a800;padding-left:.75rem;opacity:.9}</style>
 </head>
 <body>
+<div class="v1-banner" role="status"><b>v1.0.0 coming — breaking.</b> This page describes v0.3.0, live until v1.0.0 deploys. v1 mints user access tokens (your reach, the App as the ceiling). Superseded claims below are marked and kept. <a href="https://github.com/klappy/git-repo-auth-mcp/blob/main/CHANGELOG.md">Changelog</a></div>
 
 <header>
   <div class="wrap bar">
@@ -376,10 +378,11 @@ footer a{color:var(--viridian)}
       <div class="truth">
         <h3>Your grant is the boundary</h3>
         <p>Each connection is bound by OAuth to <b>one user, one installation</b> — a minted token physically cannot reach another account's repositories; GitHub enforces the walls. The worker stores no GitHub tokens, ever: its only state is its own hashed grants and your quota accounting.</p>
+        <p class="superseded"><b>Superseded 2026-09-27.</b> The sentence above was not true for one path in v0.2–v0.3: a user who could see another account's installation could bind to it and mint for that account's repositories (found 2026-09-01 by the operator; 0 tenants exposed). v1.0.0 replaces installation tokens with <b>user access tokens</b> — your own access ∩ the App's declared registration (<a href="https://github.com/klappy/git-repo-auth-mcp/blob/main/app-manifest.json">app-manifest.json</a>) — and removes the picker. v1 keeps one encrypted refresh token per user, revocable at github.com; access tokens are never stored. Old text kept for the record.</p>
       </div>
       <div class="truth">
         <h3>"No admin" ≠ "can't escalate"</h3>
-        <p>The recommended grant excludes Administration — but <b>Workflows write</b> means a token holder can modify CI, and CI runs with the repo's own credentials. That path is accepted, not eliminated: every CI change lands in PRs and audit logs under the bot identity. Don't want the trade? <b>Drop the Workflows permission.</b></p>
+        <p><i>(Superseded 2026-09-27: the live registration granted Administration on 2026-09-01; the declared registration is now Contents RW, Pull requests RW, Metadata R — no Workflows.)</i> The recommended grant excludes Administration — but <b>Workflows write</b> means a token holder can modify CI, and CI runs with the repo's own credentials. That path is accepted, not eliminated: every CI change lands in PRs and audit logs under the bot identity. Don't want the trade? <b>Drop the Workflows permission.</b></p>
       </div>
       <div class="truth">
         <h3>Blast radius, stated</h3>
