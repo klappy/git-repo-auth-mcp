@@ -23,7 +23,7 @@ import { normalizePrivateKey } from "./keys";
 import { checkMint, recordLiveToken, refundMint, scopeKey } from "./quota";
 import { emitMeterEvent } from "./billing";
 import { getDocs, listDocs } from "./docs";
-import { computeStats, isOperator } from "./stats";
+import { computeStats, isOperator, isOperatorOwned } from "./stats";
 import type { Env, GrantProps } from "./types";
 
 type AppAuth = ReturnType<typeof createAppAuth>;
@@ -69,6 +69,7 @@ function buildServer(env: Env, props: GrantProps, ctx: ExecutionContext): McpSer
         `Responses include quota transparency fields (tier, remaining, window_reset_at, ` +
         `cached) — re-requesting the same scope while a token is live is free. ` +
         `Ask the docs tool about "tiers" or "quota" for how limits work. ` +
+        `Interim security lockdown (2026-09-05): minting is restricted to the operator account — see CHANGELOG.md. ` +
         `Attribution: when committing or opening PRs, set the commit author to the operator's ` +
         `{id}+{login}@users.noreply.github.com no-reply email and ASSIGN them to the PR for ` +
         `visibility — do NOT request their review unless they ask. ` +
@@ -85,6 +86,23 @@ function buildServer(env: Env, props: GrantProps, ctx: ExecutionContext): McpSer
       },
     },
     async ({ repositories, permissions }) => {
+      // Interim lockdown (2026-09-05): refuse the mint itself, so grants that
+      // already exist in KV/props for non-operator logins die immediately —
+      // no KV migration needed. See CHANGELOG.md and
+      // docs/reviews/2026-09-05-klappy-only-lockdown.md.
+      if (!isOperatorOwned(env, props.login)) {
+        const wall = {
+          error: "access_restricted",
+          detail:
+            `This deployment is locked to its operator account during an interim ` +
+            `security review. Login '${props.login}' is not authorized to mint tokens.`,
+        };
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify(wall, null, 2) }],
+          isError: true,
+        };
+      }
+
       // Secure-by-default: an unscoped request mints read-only. Write access
       // must be asked for by name. The ceiling is still the App grant and the
       // installation — GitHub enforces both. An empty permissions map is

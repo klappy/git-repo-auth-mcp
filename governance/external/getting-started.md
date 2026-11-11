@@ -1,5 +1,12 @@
 # Getting Started
 
+> **2026-09-05 — interim lockdown.** While an installation-escalation finding is
+> remediated, this deployment accepts new connections only from its operator's GitHub
+> login. Everything below still describes the connect flow itself; a non-operator login
+> will be refused at `/callback` (or at the `github_token` mint, for a connection bound
+> before the lockdown) with an explicit reason. See `CHANGELOG.md` and
+> `docs/reviews/2026-09-05-klappy-only-lockdown.md`.
+
 Never given an AI system real access to your repos before? This is the walkthrough. You have a free bucket of 1,000 token mints — enough to genuinely experience it, no card required.
 
 ## The two-minute path

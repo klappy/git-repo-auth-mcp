@@ -4,6 +4,16 @@ Field-observed failures and their fixes. Every entry here traces back to a dated
 
 ---
 
+## "Access restricted" on `/callback` or the `github_token` mint (2026-09-05 —)
+
+**Symptom.** `/callback` returns a 403 page titled "Access restricted," or `github_token` returns `{"error":"access_restricted", ...}` for a connection that used to work.
+
+**Cause.** Not a bug — the interim operator-only lockdown. While an installation-escalation finding is remediated, this deployment refuses every GitHub login except the configured operator (and any configured `TEST_LOGINS`). This is intentional and dated: see `CHANGELOG.md` ("Unreleased — Security") and `docs/reviews/2026-09-05-klappy-only-lockdown.md` for what changed, why, and what it does not fix.
+
+**Fix.** None from the client side — this is a server-side policy, not a token or request defect. It lifts when the operator ships the planned v1.0.0 user-token shape (the real fix) or otherwise changes the lockdown config.
+
+---
+
 ## "Requires authentication" (401) on GitHub API POST, but the token works
 
 **Symptom.** A token minted by `github_token` succeeds on GET requests but a POST (e.g. creating a PR via `POST /repos/{owner}/{repo}/pulls`) returns `401 {"message":"Requires authentication"}`. Both `Authorization: Bearer <token>` and `Authorization: token <token>` fail identically.
