@@ -1,3 +1,4 @@
+import { configuredOddkitFixtures } from './oddkit-fixtures';
 import { stagingRegistration, registrationEnabled } from './staging-registration';
 import { accountRoutes, accountConsent } from './account-routes';
 export { AccountBrowserSessions } from './browser-session';
@@ -22,15 +23,20 @@ export interface BrokerReadResponse {
 }
 export interface BrokerFailure { error: 'access_denied' | 'unavailable' | 'invalid_request'; requestId: string; }
 export class AccountBroker {
-  constructor(private vault: GrantVault, private oauth: GitHubOAuth, private upstream: GitHubReads) {}
+  constructor(private vault: GrantVault, private oauth: GitHubOAuth, private upstream: GitHubReads, private oddkitPinnedZip = false, private fixtures?: ReadonlyMap<number, number>) {}
   async read(input: BrokerReadRequest, context: SessionContext): Promise<BrokerReadResponse> {
     validateRead(input);
     if (input.resource !== context.resource) throw new AccessDenied();
+    const oddkit = context.service === 'oddkit';
+    const fixtureId = oddkit ? this.fixtures?.get(context.githubId) : undefined;
+    if (oddkit && (!this.oddkitPinnedZip || fixtureId === undefined ||
+      (input.action !== 'resolve_repository' && input.action !== 'read_archive') ||
+      (input.repository.id !== undefined && input.repository.id !== fixtureId))) throw new AccessDenied();
     const grant = await this.vault.credential(context.generation, context.githubId, this.oauth);
     // Rotation invalidates old assertions. The owned account must issue a current assertion before disclosure.
     if (grant.generation !== context.generation) throw new AccessDenied();
     await this.vault.current(grant.generation);
-    const result = await this.upstream.read(input, grant.credential.accessToken);
+    const result = await this.upstream.read(input, grant.credential.accessToken, oddkit ? 'zip' : 'tar', fixtureId);
     await this.vault.current(grant.generation); // Revocation while upstream is in flight denies the result.
     const serialized = JSON.stringify(result);
     const binary = result.data as { encoding?: string; content?: string; archive?: string };
@@ -40,6 +46,8 @@ export class AccountBroker {
   }
 }
 export interface AccountEnv {
+  ODDKIT_PINNED_ZIP?: string;
+  ODDKIT_STAGING_FIXTURE_PAIRS?: string;
   STAGING_METADATA_DISCOVERY?: string;
   STAGING_CLIENT_REGISTRATION?: string;
   PRODUCTION_CLIENT_REGISTRATION?: string;
@@ -99,7 +107,12 @@ export class AccountGrantObject implements DurableObject {
       if (url.pathname === '/grant/status' && request.method === 'POST') {
         return Response.json({ generation: await this.vault.generation(context.githubId, context.generation) }, { headers: { 'Cache-Control': 'no-store' } });
       }
+      const fixturePairs = configuredOddkitFixtures(this.env);
+      const requireOddkitFixture = () => {
+        if (this.env.SERVICE === 'oddkit' && !fixturePairs?.has(context.githubId)) throw new AccessDenied();
+      };
       if (url.pathname === '/session/renew' && request.method === 'POST') {
+        requireOddkitFixture();
         const authorizedGeneration = await this.vault.generation(context.githubId, context.generation);
         // Refresh within the verified consent lineage before signing. Otherwise the
         // first read rotates the grant and correctly rejects this stale assertion.
@@ -116,16 +129,18 @@ export class AccountGrantObject implements DurableObject {
       if (url.pathname === '/read' && request.method === 'POST') {
         if (Number(request.headers.get('content-length') ?? 0) > 8192) throw new AccessDenied();
         const body = await request.text(); if (body.length > 8192) throw new AccessDenied();
-        return Response.json(await new AccountBroker(this.vault, oauth, new GitHubReads(fetch)).read(JSON.parse(body), context), { headers: { 'Cache-Control': 'no-store' } });
+        return Response.json(await new AccountBroker(this.vault, oauth, new GitHubReads(fetch), this.env.SERVICE === "oddkit" && this.env.ODDKIT_PINNED_ZIP === "owner-verified", fixturePairs).read(JSON.parse(body), context), { headers: { 'Cache-Control': 'no-store' } });
       }
       if (url.pathname === '/oauth/start' && request.method === 'POST') {
         // Explicit central-account action; no unauthenticated GET can trigger a repo grant.
         if (request.headers.get('Origin') !== new URL(this.env.ACCOUNT_ISSUER).origin) throw new AccessDenied();
         const purpose = url.searchParams.get('purpose');
         if (purpose !== 'identity' && purpose !== 'repository') throw new AccessDenied();
+        if (purpose === 'repository') requireOddkitFixture();
         return Response.json({ authorizationUrl: await oauth.start(context, purpose, store) }, { headers: { 'Cache-Control': 'no-store' } });
       }
       if (url.pathname === '/oauth/callback' && request.method === 'GET') {
+        requireOddkitFixture();
         const result = await oauth.callback(url, context, store);
         const proof = request.headers.get('X-Account-Browser-Proof');
         if (proof) {
@@ -137,6 +152,7 @@ export class AccountGrantObject implements DurableObject {
         return Response.json({ connected: Boolean(result.credential), generation }, { headers: { 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' } });
       }
       if (url.pathname === '/internal/grant/commit' && request.method === 'POST') {
+        requireOddkitFixture();
         const value = await request.json() as { candidateId: string; browser: BrowserGrantProof };
         if (value.browser.subject !== context.subject || value.browser.githubId !== context.githubId) throw new AccessDenied();
         return Response.json({ generation: await this.vault.commitCandidate(value.candidateId, value.browser, this.state.storage) }, { headers: { 'Cache-Control': 'no-store' } });

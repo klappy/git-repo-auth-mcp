@@ -49,10 +49,10 @@ export async function setup(id = 1001) {
   const transport = repositoryTransport(), oauth = provider(mockProvider({}, id));
   return { store, vault, oauth, ...transport, broker: new AccountBroker(vault, oauth, new GitHubReads(transport.fetcher)) };
 }
-export async function assertions() {
+export async function assertions(serviceName = context.service) {
   const account = await generateKeyPair('ES256', { extractable: true }), service = await generateKeyPair('ES256', { extractable: true });
-  const policy: SessionPolicy = { accountIssuer: 'https://account.example.test', serviceIssuer: 'https://service.example.test', audience: 'https://broker.example.test/read', resource: context.resource, service: context.service, accountKey: account.publicKey, serviceKey: service.publicKey };
-  const user = (changes: Record<string,unknown> = {}) => new SignJWT({ github_id: 1001, service: context.service, resource: context.resource, grant_generation: 1, ...changes }).setProtectedHeader({ alg: 'ES256' }).setSubject('acct-A').setIssuer(policy.accountIssuer).setAudience(policy.audience).setIssuedAt().setExpirationTime('5m').sign(account.privateKey);
-  const machine = (changes: Record<string,unknown> = {}) => new SignJWT({ resource: context.resource, ...changes }).setProtectedHeader({ alg: 'ES256' }).setSubject(context.service).setIssuer(policy.serviceIssuer).setAudience(policy.audience).setIssuedAt().setExpirationTime('5m').sign(service.privateKey);
+  const policy: SessionPolicy = { accountIssuer: 'https://account.example.test', serviceIssuer: 'https://service.example.test', audience: 'https://broker.example.test/read', resource: context.resource, service: serviceName, accountKey: account.publicKey, serviceKey: service.publicKey };
+  const user = (changes: Record<string,unknown> = {}) => new SignJWT({ github_id: 1001, service: serviceName, resource: context.resource, grant_generation: 1, ...changes }).setProtectedHeader({ alg: 'ES256' }).setSubject('acct-A').setIssuer(policy.accountIssuer).setAudience(policy.audience).setIssuedAt().setExpirationTime('5m').sign(account.privateKey);
+  const machine = (changes: Record<string,unknown> = {}) => new SignJWT({ resource: context.resource, ...changes }).setProtectedHeader({ alg: 'ES256' }).setSubject(serviceName).setIssuer(policy.serviceIssuer).setAudience(policy.audience).setIssuedAt().setExpirationTime('5m').sign(service.privateKey);
   return { user, machine, policy, account, service };
 }

@@ -120,3 +120,31 @@ Login-start counters enforce10attempts/browser/minute and1000total/minute in the
 Every account surface is private/no-store; anonymous /account/public works independently. PRIVATE_ACTIVATION remains disabled in committed config. Native workerd tests use synthetic provider egress and2026-06-16; actual provider behavior, configured2026-09-07 runtime parity, supported-client journeys, private-data/cache isolation, independent review, CI/Bugbot, deployment and learning closure remain required gates.
 
 Account documents use `Referrer-Policy: same-origin`: native same-origin POSTs retain the exact `Origin` required by the existing CSRF guard, while external navigations suppress `Referer`. `Origin: null`, missing origins, foreign origins and invalid nonces remain denied. The former `no-referrer` policy caused browser form POSTs to serialize their origin as `null`; request-constructor tests did not reproduce that browser behavior. CI exercises actual synthetic browser forms, without live provider credentials. Form redirects permit only the fixed GitHub origin plus, on consent documents, the exact origin of the callback already validated against the registered client. The browser regression requires both destinations to succeed and an unregistered origin to stay blocked. Serialized callback origins reject CSP delimiters, wildcards, credentials and non-HTTP(S) schemes.
+
+### Optional Oddkit pinned ZIP response
+
+This source change does not register or activate an Oddkit resource. For a
+separately approved, isolated Account/Broker context only, configure
+`SERVICE=oddkit`, the exact Oddkit resource, and
+`ODDKIT_PINNED_ZIP=owner-verified`. This capability is off when unset; it
+cannot change another service's TAR response.
+
+The authenticated `read_archive` request must include the canonical numeric
+repository ID and exact commit SHA, with no ref or path. The broker fetches
+the GitHub ZIP through its existing authorization boundary and returns the
+usual decision, generation, repository, and verified snapshot SHA alongside
+`data: { format: "zip", encoding: "base64", archive: "..." }`. The provider
+credential and codeload URL are not returned. The consumer is still
+responsible for bounded, safe decompression and pinned-root validation.
+Confirm the actual provider redirect shape on an approved private staging
+fixture before promotion; the automated tests use synthetic responses.
+
+The isolated fixture profile additionally requires
+`ODDKIT_STAGING_FIXTURE_PAIRS`, a bounded JSON array of unique numeric
+`[githubId, repositoryId]` pairs, one private repository per test identity.
+Missing or invalid pairs fail closed. The broker gates repository OAuth start,
+callback, and activation, and only allows repository resolution and pinned ZIP
+reads that match the provider's canonical private repository ID. Never apply
+this fixture profile to regular accounts or production; it does not narrow
+GitHub's upstream OAuth token scope. No settings or registrations are created
+by these source changes.

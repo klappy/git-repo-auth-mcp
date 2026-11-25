@@ -8,8 +8,8 @@ import { join } from 'node:path';
 import { harness } from './worker-harness';
 import { BrowserSessions } from '../../account/browser-session';
 
-async function fixture() {
-  const h = await harness(), dir = await mkdtemp(join(tmpdir(), 'repository-start-'));
+async function fixture(oddkit = false) {
+  const h = await harness(oddkit ? "oddkit" : undefined), dir = await mkdtemp(join(tmpdir(), 'repository-start-'));
   const output = await build({ stdin: { contents: `
 import worker,{AccountBrowserSessions as Browser,AccountGrantObject as Grant} from './account/broker';
 import {accountAssertion} from './account/account-routes';
@@ -23,12 +23,12 @@ if(p==='/__pending')return Response.json({pending:await this.saved.storage.get('
 if(p==='/oauth/start'){this.entered=true;await this.saved.storage.put('__count',(await this.saved.storage.get('__count')??0)+1);if(this.mode==='pause')await new Promise(resolve=>this.release=resolve);const result=await super.fetch(r);if(this.mode==='error')return new Response('platform timeout',{status:504});if(this.mode==='malformed')return Response.json({authorizationUrl:'https://evil.invalid/'});if(this.mode==='truncated')return new Response('{',{headers:{'Content-Type':'application/json'}});return result;}return super.fetch(r);}}
 export default{async fetch(r,e,c){const p=new URL(r.url).pathname;const authority=e.ACCOUNT_BROWSER_SESSIONS.get(e.ACCOUNT_BROWSER_SESSIONS.idFromName('account-authority-v2'));if(p==='/__op')return authority.fetch(r);if(p==='/__auth'){const b=await r.json();const s=await(await authority.fetch('https://internal.invalid/',{method:'POST',body:JSON.stringify({operation:'load',handle:b.handle})})).json();return Response.json(await accountAssertion(s,e,b.handle));}return worker.fetch(r,e,c);}}
 `, resolveDir: process.cwd(), loader: 'ts' }, bundle: true, write: false, format: 'esm', platform: 'browser', external: ['cloudflare:workers'] });
-  const bindings = { ...Object.fromEntries(Object.entries(h.env).filter(([, v]) => typeof v === 'string')), BROWSER_SESSION_KEY_HEX: 'ab'.repeat(32), ACCOUNT_LOGIN_CALLBACK: h.env.ACCOUNT_ISSUER + '/account/callback' };
+  const bindings = { ...Object.fromEntries(Object.entries(h.env).filter(([, v]) => typeof v === 'string')), BROWSER_SESSION_KEY_HEX: 'ab'.repeat(32), ACCOUNT_LOGIN_CALLBACK: h.env.ACCOUNT_ISSUER + '/account/callback', ...(oddkit ? { ODDKIT_PINNED_ZIP: 'owner-verified', ODDKIT_STAGING_FIXTURE_PAIRS: '[[1001,2001]]' } : {}) };
   const start = () => new Miniflare({ modules: true, script: output.outputFiles[0].text, compatibilityDate: '2026-06-16', host: '127.0.0.1', port: 0, cf: false, bindings, kvNamespaces: ['ACCOUNT_CONNECTOR_KV'], durableObjects: { ACCOUNT_BROWSER_SESSIONS: { className: 'AccountBrowserSessions', useSQLite: true }, ACCOUNT_GRANTS: { className: 'AccountGrantObject', useSQLite: true } }, durableObjectsPersist: dir, outboundService: () => { throw Error('No external I/O allowed during local start'); } });
   let mf = start();
   const raw = (body: Record<string, unknown>) => mf.dispatchFetch(h.env.ACCOUNT_ISSUER + '/__op', { method: 'POST', body: JSON.stringify(body), redirect: 'manual' });
   const op = async (body: Record<string, unknown>): Promise<any> => { const r = await raw(body); expect(r.status).toBe(200); return r.json(); };
-  const issue = async (browser: string) => { const p = await op({ operation: 'begin', handle: browser }); const transaction = { kind: 'identity-bootstrap', state: crypto.randomUUID(), verifier: 'INERT', callback: bindings.ACCOUNT_LOGIN_CALLBACK, expiresAt: Date.now() + 300000 }; await op({ operation: 'start', handle: browser, nonce: p.nonce, transaction }); const proof = await op({ operation: 'consume', handle: browser, nonce: p.nonce, state: transaction.state }); const active = await op({ operation: 'activate', githubId: 1001, proof: proof.proof }); const s = await op({ operation: 'load', handle: active.handle }); return { ...active, browser, subject: s.identity.subject }; };
+  const issue = async (browser: string, githubId = 1001) => { const p = await op({ operation: 'begin', handle: browser }); const transaction = { kind: 'identity-bootstrap', state: crypto.randomUUID(), verifier: 'INERT', callback: bindings.ACCOUNT_LOGIN_CALLBACK, expiresAt: Date.now() + 300000 }; await op({ operation: 'start', handle: browser, nonce: p.nonce, transaction }); const proof = await op({ operation: 'consume', handle: browser, nonce: p.nonce, state: transaction.state }); const active = await op({ operation: 'activate', githubId, proof: proof.proof }); const s = await op({ operation: 'load', handle: active.handle }); return { ...active, browser, subject: s.identity.subject }; };
   const prepare = async (a: any, purpose: string) => { const s = await op({ operation: 'load', handle: a.handle }); let ref: string | undefined;
     if (purpose === 'connector') ref = (await op({ operation: 'continuation-create', handle: a.browser, activeHandle: a.handle, intent: { clientId: 'fixture', redirectUri: 'https://client.example.test/callback', state: 'original', responseType: 'code', codeChallenge: 'c'.repeat(43), codeChallengeMethod: 'S256', resource: h.env.RESOURCE, scope: ['repository:read'] } })).ref;
     const lease = await op({ operation: purpose === 'account' ? 'repository-account-prepare' : 'repository-connector-prepare', handle: a.handle, nonce: s.csrf, continuationRef: ref });
@@ -77,3 +77,17 @@ it('exact completion rejects missing/partial/old attempts; known completed write
 it('native recognized real start completion then injected attachment expiry clears only known-complete marker without redirect or replay', async () => {
   const f = await fixture(); try { const a = await f.issue('8'.repeat(64)), attempt = await f.prepare(a, 'account'); await f.op({ operation: '__fault', value: 'attach' }); const result = await f.raw(attempt); expect(result.status).toBe(403); expect(await result.text()).not.toContain('authorizationUrl'); expect(await f.op({ operation: 'repository-start-status' })).toEqual({ blocked: false }); const before = await (await f.grant(a, '__pending')).json(); expect((before as any).count).toBe(1); expect((await f.raw(attempt)).status).toBe(403); expect(await (await f.grant(a, '__pending')).json()).toEqual(before); } finally { await f.dispose(); }
 }, 30000);
+
+it('Oddkit denies a nonfixture lease before recording a latch and then admits the allowed fixture', async () => {
+  const f = await fixture(true);
+  try {
+    const denied = await f.issue('1'.repeat(64), 1002);
+    const allowed = await f.issue('2'.repeat(64), 1001);
+    expect((await f.raw(await f.prepare(denied, 'account'))).status).toBe(403);
+    expect(await f.op({ operation: 'repository-start-status' })).toEqual({ blocked: false });
+    expect(await (await f.grant(denied, '__pending')).json()).toEqual({ count: 0 });
+    expect((await f.raw(await f.prepare(allowed, 'account'))).status).toBe(200);
+    expect(await f.op({ operation: 'repository-start-status' })).toEqual({ blocked: false });
+    expect(await (await f.grant(allowed, '__pending')).json()).toMatchObject({ count: 1 });
+  } finally { await f.dispose(); }
+}, 10000);

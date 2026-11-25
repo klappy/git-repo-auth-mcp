@@ -1,3 +1,4 @@
+import { configuredOddkitFixtures } from './oddkit-fixtures';
 import { registrationLedger, selectedRegistrationTarget } from './staging-registration';
 import { CompactEncrypt, compactDecrypt, decodeProtectedHeader } from 'jose';
 import { AccessDenied } from './session';
@@ -266,7 +267,7 @@ export class BrowserSessions {
   async csrf(handle: string, nonce: string) { return this.storage.transaction(async tx => { const { key, session } = await this.valid(tx, handle); if (session.csrf !== nonce) throw new AccessDenied(); session.csrf = opaque(); await tx.put(key, await this.seal(session)); return session; }); }
   async touch(handle: string) { return this.storage.transaction(async tx => { const { key, session } = await this.valid(tx, handle); session.idleUntil = Math.min(Date.now() + 1_800_000, session.absoluteUntil); await tx.put(key, await this.seal(session)); return session; }); }
   async repositoryStartStatus() { try { return { blocked: await this.storage.get(startMarkerKey) !== undefined }; } catch { return { blocked: true }; } }
-  async admitRepositoryStart(handle: string, lease: string, purpose: 'account' | 'connector', ref?: string) {
+  async admitRepositoryStart(handle: string, lease: string, purpose: 'account' | 'connector', ref?: string, allowIdentity?: (id: number) => boolean) {
     handleShape(lease); return this.storage.transaction(async tx => {
       // Any persisted value, including corrupt ciphertext, is a fail-closed barrier.
       if (await tx.get(startMarkerKey) !== undefined) throw new AccessDenied();
@@ -274,6 +275,7 @@ export class BrowserSessions {
       if (!r || r.lease !== lease || r.state !== '' || r.startAttempt || r.expiresAt <= Date.now() || Date.now() - session.verifiedAt > 300000) throw new AccessDenied();
       if (purpose === 'account') { if (ref || r.purpose !== 'account' || r.phase !== 'prepared') throw new AccessDenied(); await this.accountLease(tx, session, lease); }
       else { if (purpose !== 'connector' || r.purpose === 'account' || !ref) throw new AccessDenied(); handleShape(ref); const c = await this.continuation(tx, session.browser, await hash(ref)); if (r.continuationHash !== c.refHash) throw new AccessDenied(); }
+      if (allowIdentity && !allowIdentity(session.identity.githubId)) throw new AccessDenied();
       const marker: StartMarker = { version: 1, subject: session.identity.subject, browser: session.browser, generation: session.generation, purpose, lease, attempt: opaque() };
       r.startAttempt = marker.attempt; await tx.put(key, await this.seal(session)); await tx.put(startMarkerKey, await this.seal(marker)); return marker;
     });
@@ -379,7 +381,9 @@ export class AccountBrowserSessions implements DurableObject {
           try {
             const env = this.env as BrowserEnv & AccountEnv;
             if (env.PRIVATE_ACTIVATION !== 'owner-verified' || typeof value.assertion !== 'string' || !value.assertion) throw new AccessDenied();
-            const marker = await store.admitRepositoryStart(value.handle, value.lease, value.purpose, value.continuationRef);
+            const fixtures = configuredOddkitFixtures(env);
+            const marker = await store.admitRepositoryStart(value.handle, value.lease, value.purpose, value.continuationRef,
+              env.SERVICE === 'oddkit' ? id => fixtures?.has(id) === true : undefined);
             // Bootstrap already completed outside this gate. This endpoint performs only
             // local GrantDO work; no GitHub request or browser-authority re-entry.
             const result = await env.ACCOUNT_GRANTS.get(env.ACCOUNT_GRANTS.idFromName(marker.subject)).fetch(new Request(new URL('/oauth/start?purpose=repository', env.ACCOUNT_ISSUER), { method: 'POST', headers: { Authorization: 'Bearer ' + value.assertion, Origin: new URL(env.ACCOUNT_ISSUER).origin }, redirect: 'manual' }));
