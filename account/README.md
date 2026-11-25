@@ -138,3 +138,13 @@ credential and codeload URL are not returned. The consumer is still
 responsible for bounded, safe decompression and pinned-root validation.
 Confirm the actual provider redirect shape on an approved private staging
 fixture before promotion; the automated tests use synthetic responses.
+
+The isolated fixture profile additionally requires
+`ODDKIT_STAGING_FIXTURE_PAIRS`, a bounded JSON array of unique numeric
+`[githubId, repositoryId]` pairs, one private repository per test identity.
+Missing or invalid pairs fail closed. The broker gates repository OAuth start,
+callback, and activation, and only allows repository resolution and pinned ZIP
+reads that match the provider's canonical private repository ID. Never apply
+this fixture profile to regular accounts or production; it does not narrow
+GitHub's upstream OAuth token scope. No settings or registrations are created
+by these source changes.

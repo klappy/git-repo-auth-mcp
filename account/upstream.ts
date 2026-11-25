@@ -41,12 +41,13 @@ export class GitHubReads {
     if (binary) { let text = ''; for (const byte of body) text += String.fromCharCode(byte); return { ...(zip ? { format: 'zip' } : {}), encoding: 'base64', archive: btoa(text) }; }
     return JSON.parse(new TextDecoder().decode(body));
   }
-  async read(input: BrokerReadRequest, token: string, archiveFormat: 'tar' | 'zip' = 'tar') {
+  async read(input: BrokerReadRequest, token: string, archiveFormat: 'tar' | 'zip' = 'tar', fixtureId?: number) {
     validateRead(input);
     const base = `https://api.github.com/repos/${encodeURIComponent(input.repository.owner)}/${encodeURIComponent(input.repository.name)}`;
     // Every request starts with a current provider authorization+canonical identity check. No decision cache.
     const repo = await this.request(base, token) as { id: number; full_name: string; default_branch: string; private: boolean };
     if (!Number.isSafeInteger(repo.id) || repo.id <= 0 || (input.repository.id !== undefined && repo.id !== input.repository.id) || repo.full_name?.toLowerCase() !== `${input.repository.owner}/${input.repository.name}`.toLowerCase()) throw new AccessDenied();
+    if (fixtureId !== undefined && (repo.id !== fixtureId || repo.private !== true)) throw new AccessDenied();
     const checkedAt = new Date().toISOString();
     const commit = await this.request(`${base}/commits/${encodeURIComponent(input.sha ?? input.ref ?? repo.default_branch)}`, token) as { sha: string; commit?: { tree?: { sha?: string } } };
     if (!SHA.test(commit.sha) || (input.sha && commit.sha !== input.sha)) throw new AccessDenied();

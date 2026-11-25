@@ -1,5 +1,6 @@
 import { expect, it } from 'vitest';
 import { AccountBroker } from '../../account/broker';
+import { oddkitFixturePairs } from '../../account/oddkit-fixtures';
 import { GitHubReads } from '../../account/upstream';
 import { context, input, setup } from './helpers';
 
@@ -18,7 +19,7 @@ async function harness(path = zipPath, status = 200, bytes = fixture) {
     if (String(url).startsWith('https://codeload.github.com/')) return new Response(bytes, { status });
     return x.fetcher(url, init);
   }) as typeof fetch;
-  return { calls, broker: new AccountBroker(x.vault, x.oauth, new GitHubReads(transport), true), defaultBroker: new AccountBroker(x.vault, x.oauth, new GitHubReads(transport)) };
+  return { calls, broker: new AccountBroker(x.vault, x.oauth, new GitHubReads(transport), true, oddkitFixturePairs('[[1001,2001],[1002,2002]]')), defaultBroker: new AccountBroker(x.vault, x.oauth, new GitHubReads(transport)) };
 }
 
 it('serves only pinned, proxied ZIP bytes to enabled Oddkit while preserving Cartographer wire format', async () => {
@@ -45,4 +46,34 @@ it('denies unpinned requests, wrong redirect pins, partial responses, and non-ZI
     const { broker } = await harness(path, status, fixture);
     await expect(broker.read(request, oddkit)).rejects.toThrow();
   }
+});
+
+it('rejects missing, incomplete, nonnumeric, unsafe, or ambiguous fixture configuration', () => {
+  for (const raw of [undefined, '', 'null', '[]', '[[1]]', '[[1,"2"]]', '[[1,9007199254740992]]', '[[0,2]]', '[[1,2],[1,3]]', '[[1,2],[3,2]]']) {
+    expect(oddkitFixturePairs(raw)).toBeUndefined();
+  }
+  expect(oddkitFixturePairs('[[1001,2001],[1002,2002]]')?.get(1002)).toBe(2002);
+});
+
+it('bounds both repo resolution and archive reads to the verified fixture pair', async () => {
+  const { broker, calls } = await harness();
+  const resolve = { ...request, action: 'resolve_repository' as const, sha: undefined, repository: { ...request.repository, id: undefined } };
+  await expect(broker.read(resolve, { ...oddkit, githubId: 9000 })).rejects.toThrow();
+  await expect(broker.read({ ...request, repository: { ...request.repository, id: 9000 } }, oddkit)).rejects.toThrow();
+  await expect(broker.read({ ...request, action: 'read_tree' }, oddkit)).rejects.toThrow();
+  expect(calls).toHaveLength(0);
+  await expect(broker.read(resolve, oddkit)).resolves.toMatchObject({ repository: { id: 2001 } });
+  expect(calls.some(c => c.url.includes('/zipball/'))).toBe(false);
+});
+
+it('checks canonical provider identity for a named repo even when the request does not supply an ID', async () => {
+  const x = await setup();
+  const calls: string[] = [];
+  const transport = (async (url: Parameters<typeof fetch>[0]) => {
+    calls.push(String(url));
+    return Response.json({ id: 9999, full_name: 'personal/same-name', default_branch: 'main', private: true });
+  }) as typeof fetch;
+  const broker = new AccountBroker(x.vault, x.oauth, new GitHubReads(transport), true, oddkitFixturePairs('[[1001,2001]]'));
+  await expect(broker.read({ ...request, action: 'resolve_repository', repository: { ...request.repository, id: undefined } }, oddkit)).rejects.toThrow();
+  expect(calls).toEqual(['https://api.github.com/repos/personal/same-name']);
 });

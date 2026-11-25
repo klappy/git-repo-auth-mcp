@@ -7,8 +7,8 @@ import { context, credential, input, mockProvider } from './helpers';
 import { harness } from './worker-harness';
 
 afterEach(() => vi.unstubAllGlobals());
-async function expiredGrant() {
-  const h = await harness();
+async function expiredGrant(service?: string) {
+  const h = await harness(service);
   const vault = new GrantVault(new DurableGrantStore(h.storage as unknown as DurableObjectStorage), new Uint8Array(32).fill(7), context.subject);
   await vault.connect({ ...credential(), expiresAt: 0 }, 1);
   return { ...h, vault };
@@ -115,4 +115,22 @@ it('revocation during assertion signing prevents its disclosure', async () => {
     expect(await response.json()).toMatchObject({ error: 'access_denied' });
     expect(h.data.get('grant')).toMatchObject({ status: 'revoked' });
   } finally { spy.mockRestore(); }
+});
+
+it('Oddkit renewal denies off, malformed and nonfixture config without refreshing, then permits an allowed fixture', async () => {
+  const h = await expiredGrant('oddkit'), provider = mockProvider();
+  const oddkit = { ...context, service: 'oddkit' };
+  vi.stubGlobal('fetch', provider);
+  for (const [flag, raw] of [[undefined, '[[1001,2001]]'], ['owner-verified', '[[1001]]'], ['owner-verified', '[[1002,2002]]']]) {
+    h.env.ODDKIT_PINNED_ZIP = flag;
+    h.env.ODDKIT_STAGING_FIXTURE_PAIRS = raw;
+    expect((await connectorSession(h.request('/connector/session'), h.env, oddkit)).status).toBe(403);
+    expect(provider).not.toHaveBeenCalled();
+  }
+  h.env.ODDKIT_STAGING_FIXTURE_PAIRS = '[[1001,2001]]';
+  expect((await connectorSession(h.request('/connector/session'), h.env, oddkit)).status).toBe(200);
+  expect(provider).toHaveBeenCalledTimes(2);
+  h.env.ODDKIT_STAGING_FIXTURE_PAIRS = undefined;
+  expect((await accountWorker.fetch(h.request('/disconnect'), h.env)).status).toBe(200);
+  expect(h.data.get('grant')).toMatchObject({ status: 'revoked' });
 });
