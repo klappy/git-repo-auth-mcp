@@ -19,7 +19,7 @@ export class GitHubReads {
     // Native Workers fetch requires its global receiver, not the class instance.
     this.transport = (...args) => transport(...args);
   }
-  private async request(url: string, token?: string, binary = false, archivePath?: string): Promise<unknown> {
+  private async request(url: string, token?: string, binary = false, archivePath?: string, zip = false): Promise<unknown> {
     const target = new URL(url);
     if (target.origin !== 'https://api.github.com' && !(binary && target.origin === 'https://codeload.github.com')) throw new AccessDenied();
     const headers: Record<string,string> = { Accept: 'application/vnd.github+json', 'User-Agent': 'native-account-broker', 'X-GitHub-Api-Version': '2022-11-28' };
@@ -30,17 +30,18 @@ export class GitHubReads {
       const redirect = new URL(response.headers.get('location') ?? '', url);
       // Codeload signed location is accepted only from this request; credentials never cross origins.
       if (redirect.origin !== 'https://codeload.github.com' || redirect.username || redirect.password || redirect.hash || !archivePath || redirect.pathname !== archivePath) throw new AccessDenied();
-      return this.request(redirect.toString(), undefined, true, archivePath);
+      return this.request(redirect.toString(), undefined, true, archivePath, zip);
     }
-    if (!response.ok || Number(response.headers.get('content-length') ?? 0) > this.maxBytes) throw new AccessDenied();
+    if ((zip ? response.status !== 200 || target.origin !== "https://codeload.github.com" : !response.ok) || Number(response.headers.get('content-length') ?? 0) > this.maxBytes) throw new AccessDenied();
     const reader = response.body?.getReader(); if (!reader) throw new AccessDenied();
     const chunks: Uint8Array[] = []; let size = 0;
     for (;;) { const { done, value } = await reader.read(); if (done) break; size += value.byteLength; if (size > this.maxBytes) { await reader.cancel(); throw new AccessDenied(); } chunks.push(value); }
     const body = new Uint8Array(size); let offset = 0; for (const c of chunks) { body.set(c, offset); offset += c.length; }
-    if (binary) { let text = ''; for (const byte of body) text += String.fromCharCode(byte); return { encoding: 'base64', archive: btoa(text) }; }
+    if (zip && (size < 4 || body[0] !== 0x50 || body[1] !== 0x4b || body[2] !== 3 || body[3] !== 4)) throw new AccessDenied();
+    if (binary) { let text = ''; for (const byte of body) text += String.fromCharCode(byte); return { ...(zip ? { format: 'zip' } : {}), encoding: 'base64', archive: btoa(text) }; }
     return JSON.parse(new TextDecoder().decode(body));
   }
-  async read(input: BrokerReadRequest, token: string) {
+  async read(input: BrokerReadRequest, token: string, archiveFormat: 'tar' | 'zip' = 'tar') {
     validateRead(input);
     const base = `https://api.github.com/repos/${encodeURIComponent(input.repository.owner)}/${encodeURIComponent(input.repository.name)}`;
     // Every request starts with a current provider authorization+canonical identity check. No decision cache.
@@ -65,7 +66,15 @@ export class GitHubReads {
         if (blob.type !== 'file' || blob.path !== input.path || !SHA.test(blob.sha ?? '') || blob.encoding !== 'base64' || typeof blob.content !== 'string' || atob(blob.content).includes(token)) throw new AccessDenied();
         data = { path: blob.path, sha: blob.sha, encoding: blob.encoding, content: blob.content }; break;
       }
-      case 'read_archive': data = await this.request(`${base}/tarball/${commit.sha}`, token, true, `/${repo.full_name}/legacy.tar.gz/${commit.sha}`); break;
+      case 'read_archive': {
+        const zip = archiveFormat === 'zip';
+        if (zip && (input.repository.id === undefined || !input.sha || input.ref !== undefined || input.path !== undefined)) throw new AccessDenied();
+        data = await this.request(
+          `${base}/${zip ? 'zipball' : 'tarball'}/${commit.sha}`, token, true,
+          `/${repo.full_name}/${zip ? 'legacy.zip' : 'legacy.tar.gz'}/${commit.sha}`, zip,
+        );
+        break;
+      }
     }
     // A provider malfunction must not make even a sentinel bearer an outbound data value.
     if (JSON.stringify(data).includes(token)) throw new AccessDenied();

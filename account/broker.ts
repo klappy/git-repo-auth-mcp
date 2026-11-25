@@ -22,15 +22,15 @@ export interface BrokerReadResponse {
 }
 export interface BrokerFailure { error: 'access_denied' | 'unavailable' | 'invalid_request'; requestId: string; }
 export class AccountBroker {
-  constructor(private vault: GrantVault, private oauth: GitHubOAuth, private upstream: GitHubReads) {}
+  constructor(private vault: GrantVault, private oauth: GitHubOAuth, private upstream: GitHubReads, private oddkitPinnedZip = false) {}
   async read(input: BrokerReadRequest, context: SessionContext): Promise<BrokerReadResponse> {
     validateRead(input);
-    if (input.resource !== context.resource) throw new AccessDenied();
+    if (input.resource !== context.resource || (context.service === 'oddkit' && input.action === 'read_archive' && !this.oddkitPinnedZip)) throw new AccessDenied();
     const grant = await this.vault.credential(context.generation, context.githubId, this.oauth);
     // Rotation invalidates old assertions. The owned account must issue a current assertion before disclosure.
     if (grant.generation !== context.generation) throw new AccessDenied();
     await this.vault.current(grant.generation);
-    const result = await this.upstream.read(input, grant.credential.accessToken);
+    const result = await this.upstream.read(input, grant.credential.accessToken, this.oddkitPinnedZip && context.service === 'oddkit' ? 'zip' : 'tar');
     await this.vault.current(grant.generation); // Revocation while upstream is in flight denies the result.
     const serialized = JSON.stringify(result);
     const binary = result.data as { encoding?: string; content?: string; archive?: string };
@@ -40,6 +40,7 @@ export class AccountBroker {
   }
 }
 export interface AccountEnv {
+  ODDKIT_PINNED_ZIP?: string;
   STAGING_METADATA_DISCOVERY?: string;
   STAGING_CLIENT_REGISTRATION?: string;
   PRODUCTION_CLIENT_REGISTRATION?: string;
@@ -116,7 +117,7 @@ export class AccountGrantObject implements DurableObject {
       if (url.pathname === '/read' && request.method === 'POST') {
         if (Number(request.headers.get('content-length') ?? 0) > 8192) throw new AccessDenied();
         const body = await request.text(); if (body.length > 8192) throw new AccessDenied();
-        return Response.json(await new AccountBroker(this.vault, oauth, new GitHubReads(fetch)).read(JSON.parse(body), context), { headers: { 'Cache-Control': 'no-store' } });
+        return Response.json(await new AccountBroker(this.vault, oauth, new GitHubReads(fetch), this.env.SERVICE === "oddkit" && this.env.ODDKIT_PINNED_ZIP === "owner-verified").read(JSON.parse(body), context), { headers: { 'Cache-Control': 'no-store' } });
       }
       if (url.pathname === '/oauth/start' && request.method === 'POST') {
         // Explicit central-account action; no unauthenticated GET can trigger a repo grant.
